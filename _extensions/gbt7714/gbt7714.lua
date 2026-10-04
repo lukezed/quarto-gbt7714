@@ -12,6 +12,12 @@ local function has_cjk(v)
 end
 
 local function is_cjk(r)
+  -- Explicit langid wins, as in bst `is.lang.cjk` (pandoc keeps it as `language`).
+  local lang = r.language and pandoc.utils.stringify(r.language):lower()
+  if lang and lang ~= '' then
+    return lang:match('^zh') or lang:match('^ja') or lang:match('^ko')
+      or lang == 'chinese' or lang == 'japanese' or lang == 'korean' or false
+  end
   if has_cjk(r.title) or has_cjk(r['container-title']) then return true end
   for _, role in ipairs({ 'author', 'editor', 'translator' }) do
     for _, n in ipairs(r[role] or {}) do
@@ -66,6 +72,26 @@ local function fullwidth(x)
   end })
 end
 
+-- Mirror bst `format.edition`: ordinal words -> numbers, 1st edition omitted,
+-- then "3 版" / "5th ed." / "5 изд."; other text (修订版, 新1版) is kept.
+local WORDNUM = { first = 1, second = 2, third = 3, fourth = 4, fifth = 5,
+                  sixth = 6, seventh = 7, eighth = 8, ninth = 9, tenth = 10 }
+local REVISED = { ['revised edition'] = 'Rev. ed.', ['revised ed.'] = 'Rev. ed.',
+                  revised = 'Rev. ed.', ['rev.'] = 'Rev. ed.', ['修订'] = '修订版' }
+
+local function edition(e, cjk, lang)
+  if e == nil then return nil end
+  local s = pandoc.utils.stringify(e)
+  local n = s:match('^(%d+)') or WORDNUM[s:lower()]
+  if not n then return REVISED[s:lower()] or s end
+  n = tostring(n)
+  if n == '1' then return nil end
+  if cjk then return n .. ' 版' end
+  if lang:match('^ru') then return n .. ' изд.' end
+  local suf = (n:sub(-2, -2) == '1' and 'th') or ({ ['1'] = 'st', ['2'] = 'nd', ['3'] = 'rd' })[n:sub(-1)] or 'th'
+  return n .. suf .. ' ed.'
+end
+
 -- biblatex types pandoc maps to an empty or lossy CSL type; the CSL expects these.
 local BIBTYPE = {
   archive = 'collection', map = 'map', preprint = 'article', standard = 'standard',
@@ -104,7 +130,10 @@ function Pandoc(doc)
   local types = bib_types(doc.meta)
   for _, r in ipairs(refs) do
     r.type = types[r.id] or r.type
-    if is_cjk(r) then
+    local lang = r.language and pandoc.utils.stringify(r.language):lower() or ''
+    local cjk = is_cjk(r)
+    r.edition = edition(r.edition, cjk, lang)
+    if cjk then
       r.language = 'zh'
     else
       r.language = nil

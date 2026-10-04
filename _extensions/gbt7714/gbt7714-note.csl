@@ -526,30 +526,12 @@
   </macro>
   
   <macro name="edition">
-    <choose>
-      <if is-numeric="edition">
-        <group delimiter=" ">
-          <number variable="edition" form="ordinal" />
-          <label variable="edition" form="short" />
-        </group>
-      </if>
-      <else>
-        <text variable="edition" />
-      </else>
-    </choose>
+    <!-- formatted by gbt7714.lua (bst format.edition) -->
+    <text variable="edition" />
   </macro>
   <macro name="edition-en">
-    <choose>
-      <if is-numeric="edition">
-        <group delimiter=" ">
-          <number variable="edition" form="ordinal" />
-          <text value=" ed." />
-        </group>
-      </if>
-      <else>
-        <text variable="edition" />
-      </else>
-    </choose>
+    <!-- formatted by gbt7714.lua (bst format.edition) -->
+    <text variable="edition" />
   </macro>
   <macro name="version">
     <label variable="version" form="short" text-case="capitalize-first" strip-periods="true" />
