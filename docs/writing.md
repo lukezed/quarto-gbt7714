@@ -87,7 +87,16 @@ gbt7714: authoryear   # numeric | note 也可
 | manuscript | 12pt | 固定 25pt | 12pt、25pt（最小值） |
 | journal | 10pt | `linestretch: 1.05` | 12pt、1.5 倍、单栏 |
 
-投稿稿正文采用 12pt、25pt（最小值） 行距、段间距 0；HTML 使用接近的屏幕阅读行高。不同输出格式的字体和分页仍可能略有差异。
+投稿稿正文为小四（12pt）、25pt 行距、首行缩进两字、段前段后 0；Word 使用最小行距，允许公式撑高。A4 页边距上下 25.4mm、左右 31.7mm。章级标题为三号黑体居中，节、小节标题分别为小三、四号黑体；参考文献为五号、20pt 行距。PDF 中文使用 Fandol 宋体／黑体，英文优先 Times New Roman，缺少时使用 TeX Gyre Termes。HTML 保持相同字号层级，适应屏幕宽度。
 
-当前 `paper-style` 会设置 PDF 的 `fontsize` 与 `linestretch`；仅在 YAML 覆盖这两项不会生效。需要精确版式时，应修改项目内 `_extensions/gbt7714-paper/layout.lua` 与 `paper.tex`，Word 则修改 `paper-reference.docx` 的对应样式；已有学校模板可以只接入引用扩展。
+随附 `manuscript` 项目已选用独立的 Word 样式文件。已有项目通过 `quarto add lukezed/quarto-gbt7714` 安装后，使用投稿稿时增加：
+
+```yaml
+paper-style: manuscript
+format:
+  gbt7714-paper-docx:
+    reference-doc: _extensions/lukezed/gbt7714-paper/manuscript-reference.docx
+```
+
+当前 `paper-style` 会设置 PDF 的 `fontsize` 与 `linestretch`；仅在 YAML 覆盖这两项不会生效。需要精确版式时，应修改项目内 `_extensions/gbt7714-paper/layout.lua` 与 `paper.tex`，Word 则修改 `paper-reference.docx`（投稿稿为 `manuscript-reference.docx`）的对应样式；已有学校模板可以只接入引用扩展。
 

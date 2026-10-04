@@ -28,6 +28,8 @@ python3 test/test_inferred_year.py # 推定年份与出版年份的独立消歧
 python3 test/test_fragment_entries.py # 丛书卷册与日期片段
 python3 test/test_bibliography_heading.py # 自动标题与显式文献表标题
 python3 test/test_blind.py --pdf --manuscript # 投稿稿分页与匿名检查
+# 创建并渲染 manuscript 项目后，检查 Word 样式及图注 OOXML：
+python3 test/test_manuscript_typography.py /path/to/project/_output/paper.docx
 python3 test/test_blind.py --pdf  # HTML/Word/PDF 匿名与署名输出
 sh example/arch-cases/run.sh      # Quarto 集成（标题、交叉引用、margin、GFM）
 ```

@@ -26,6 +26,9 @@ def fixture(blind):
     return f'''---
 title: PublicTitle923
 paper-style: {'manuscript' if '--manuscript' in sys.argv else 'student'}
+format:
+  gbt7714-paper-docx:
+    reference-doc: _extensions/gbt7714-paper/{'manuscript' if '--manuscript' in sys.argv else 'paper'}-reference.docx
 {setting}author:
   - name: PrivateAuthor923
     email: private923@example.org

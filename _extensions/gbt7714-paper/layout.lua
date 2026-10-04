@@ -66,10 +66,20 @@ local function manuscript(doc)
   end
   if pdf then
     append_header(meta, [[
-\usepackage{fancyhdr}
+\usepackage{fancyhdr,caption}
+\geometry{a4paper,top=25.4mm,bottom=25.4mm,left=31.7mm,right=31.7mm}
+\IfFontExistsTF{Times New Roman}{\setmainfont{Times New Roman}}{\setmainfont{TeX Gyre Termes}}
+\AtBeginDocument{\ctexset{
+ section={format=\centering\heiti\bfseries\fontsize{16bp}{16bp}\selectfont,beforeskip=25bp,afterskip=18bp,afterindent=true},
+ subsection={format=\raggedright\heiti\fontsize{15bp}{15bp}\selectfont,beforeskip=25bp,afterskip=6bp,afterindent=true},
+ subsubsection={format=\raggedright\heiti\fontsize{14bp}{14bp}\selectfont,beforeskip=12bp,afterskip=6bp,afterindent=true}
+}}
+\DeclareCaptionFont{manuscript}{\fontsize{10.5bp}{12.6bp}\selectfont}
+\captionsetup{font=manuscript,labelfont=normalfont,justification=centering,singlelinecheck=false,skip=6bp}
+\AtBeginEnvironment{CSLReferences}{\fontsize{10.5bp}{20bp}\selectfont\setlength{\parskip}{0pt}\setlength{\cslhangindent}{2em}}
 % Set the normal-text baseline explicitly; do not multiply the class baseline.
 \makeatletter
-\g@addto@macro\normalsize{\setlength{\baselineskip}{25pt}}
+\g@addto@macro\normalsize{\fontsize{12bp}{25bp}\selectfont}
 \makeatother
 \AtBeginDocument{\normalsize\setlength{\parskip}{0pt}}
 \pagestyle{fancy}\fancyhf{}\fancyhead[R]{\thepage}
@@ -79,7 +89,7 @@ local function manuscript(doc)
 \renewcommand{\maketitle}{%
   \thispagestyle{plain}\null\vspace{2cm}
   \begin{center}
-  {\large\bfseries \@title\par}\vspace{1.5\baselineskip}
+  {\heiti\fontsize{16bp}{16bp}\selectfont\bfseries \@title\par}\vspace{1.5\baselineskip}
   {\normalsize \@author\par}\vspace{\baselineskip}
   {\normalsize \@date\par}
   \end{center}\clearpage}
@@ -101,7 +111,7 @@ local function manuscript(doc)
   local abstract_page = pandoc.List({})
   if #abstract > 0 then
     if pdf then
-      abstract_page:insert(pandoc.RawBlock('latex', '\\begin{center}\\bfseries 摘要\\end{center}'))
+      abstract_page:insert(pandoc.RawBlock('latex', '\\section*{摘要}'))
     else
       abstract_page:insert(styled({pandoc.Para({pandoc.Strong({pandoc.Str('摘要')})})}, 'ManuscriptHeading'))
     end
@@ -130,9 +140,8 @@ local function manuscript(doc)
       return {pagebreak(), header}
     end
   end}).blocks
-  if word then
-    prefix:insert(styled(doc.blocks, 'ManuscriptBody', 'paper-manuscript-text'))
-  else prefix:extend(doc.blocks) end
+  -- The manuscript reference supplies body styles without overriding captions.
+  prefix:extend(doc.blocks)
   doc.blocks = prefix
 end
 

@@ -1,6 +1,6 @@
 title: GB/T 7714 Paper
 author: lukezed
-version: 0.1.0
+version: 0.1.0-beta.1
 quarto-required: ">=1.4.0"
 contributes:
   formats:
@@ -15,6 +15,8 @@ contributes:
         - ../gbt7714/gbt7714.lua
         - path: journal-tables.lua
           at: post-quarto
+        - path: word-captions.lua
+          at: post-render
     html:
       theme: cosmo
       css: paper.css

@@ -17,7 +17,8 @@ gbt7714: authoryear
 format:
   gbt7714-paper-html: default
   gbt7714-paper-pdf: default
-  gbt7714-paper-docx: default
+  gbt7714-paper-docx:
+    reference-doc: _extensions/gbt7714-paper/manuscript-reference.docx
 ---
 
 # 引言

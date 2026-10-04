@@ -1,4 +1,5 @@
-"""Build the writing templates' A4, 12pt, 1.5-spaced Word reference document."""
+"""Build the shared paper and separately formatted manuscript Word references."""
+import argparse
 from pathlib import Path
 from zipfile import ZipFile, ZIP_DEFLATED
 import xml.etree.ElementTree as ET
@@ -8,6 +9,10 @@ W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
 ET.register_namespace('w', W)
 ET.register_namespace('r', 'http://schemas.openxmlformats.org/officeDocument/2006/relationships')
 NS = {'w': W}
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--manuscript-only', action='store_true',
+                    help='Build the manuscript reference without rewriting the shared paper reference.')
+args = parser.parse_args()
 
 def child(parent, name, **attrs):
     element = parent.find('w:' + name, NS)
@@ -108,6 +113,98 @@ files['[Content_Types].xml'] = ET.tostring(content_types, encoding='utf-8', xml_
 
 files['word/document.xml'] = ET.tostring(document, encoding='utf-8', xml_declaration=True)
 out = ROOT / '_extensions/gbt7714-paper/paper-reference.docx'
+if not args.manuscript_only:
+    with ZipFile(out, 'w', ZIP_DEFLATED) as archive:
+        for name, data in files.items():
+            archive.writestr(name, data)
+    print(out)
+
+# Start from the same package, then override only manuscript typography and geometry.
+# This keeps student/journal output on the existing shared paper reference.
+def manuscript_style(name):
+    style = styles.find("w:style[@w:styleId='" + name + "']", NS)
+    if style is None:
+        style = ET.SubElement(styles, '{' + W + '}style', {
+            '{' + W + '}type': 'paragraph', '{' + W + '}styleId': name})
+        child(style, 'name', val=name)
+        child(style, 'basedOn', val='BodyText')
+    return style
+
+def manuscript_font(style, size, east_asia='宋体', bold=False):
+    run = child(style, 'rPr')
+    fonts = child(run, 'rFonts')
+    # Explicit font names must override inherited theme font attributes.
+    fonts.attrib.clear()
+    child(run, 'rFonts', ascii='Times New Roman', hAnsi='Times New Roman',
+          cs='Times New Roman', eastAsia=east_asia)
+    child(run, 'sz', val=size)
+    child(run, 'szCs', val=size)
+    child(run, 'b', val=int(bold))
+    child(run, 'bCs', val=int(bold))
+    child(run, 'color', val='000000')
+
+def manuscript_paragraph(style, *, alignment='both', before=0, after=0,
+                         line=500, line_rule='atLeast', first_line=480,
+                         left=0, hanging=None):
+    props = child(style, 'pPr')
+    child(props, 'jc', val=alignment)
+    spacing = child(props, 'spacing')
+    spacing.attrib.clear()
+    child(props, 'spacing', before=before, after=after, line=line, lineRule=line_rule)
+    indent = child(props, 'ind')
+    indent.attrib.clear()
+    child(props, 'ind', left=left, right=0)
+    if hanging is None:
+        child(props, 'ind', firstLine=first_line)
+    else:
+        child(props, 'ind', hanging=hanging)
+    child(props, 'widowControl')
+
+default_fonts = child(defaults, 'rFonts')
+default_fonts.attrib.clear()
+child(defaults, 'rFonts', ascii='Times New Roman', hAnsi='Times New Roman',
+      cs='Times New Roman', eastAsia='宋体')
+for name in ('Normal', 'Body', 'BodyText', 'FirstParagraph', 'ManuscriptBody',
+             'Abstract', 'ManuscriptAbstract'):
+    style = manuscript_style(name)
+    manuscript_font(style, 24)
+    # A minimum 25pt line accommodates tall editable Word equations.
+    manuscript_paragraph(style)
+
+for name, size, alignment, before, after in (
+    ('Heading1', 32, 'center', 500, 360),
+    ('ManuscriptHeading', 32, 'center', 500, 360),
+    ('Heading2', 30, 'left', 500, 120),
+    ('Heading3', 28, 'left', 240, 120),
+):
+    style = manuscript_style(name)
+    manuscript_font(style, size, east_asia='黑体', bold=True)
+    manuscript_paragraph(style, alignment=alignment, before=before, after=after,
+                         line=240, line_rule='auto', first_line=0)
+    child(child(style, 'pPr'), 'keepNext')
+
+style = manuscript_style('ManuscriptTitle')
+manuscript_font(style, 32, east_asia='黑体', bold=True)
+title_before = style.find('w:pPr/w:spacing', NS).get('{' + W + '}before', '1440')
+manuscript_paragraph(style, alignment='center', before=title_before, after=240,
+                     line=240, line_rule='auto', first_line=0)
+
+style = manuscript_style('Bibliography')
+manuscript_font(style, 21)
+manuscript_paragraph(style, line=400, line_rule='exact', left=420, hanging=420)
+for name in ('Caption', 'ImageCaption'):
+    style = manuscript_style(name)
+    manuscript_font(style, 21)
+    child(child(style, 'rPr'), 'i', val=0)
+    child(child(style, 'rPr'), 'iCs', val=0)
+    manuscript_paragraph(style, alignment='center', before=120, after=120,
+                         line=240, line_rule='auto', first_line=0)
+
+child(section, 'pgMar', top=1440, right=1797, bottom=1440, left=1797,
+      header=850, footer=992, gutter=0)
+files['word/styles.xml'] = ET.tostring(styles, encoding='utf-8', xml_declaration=True)
+files['word/document.xml'] = ET.tostring(document, encoding='utf-8', xml_declaration=True)
+out = ROOT / '_extensions/gbt7714-paper/manuscript-reference.docx'
 with ZipFile(out, 'w', ZIP_DEFLATED) as archive:
     for name, data in files.items():
         archive.writestr(name, data)

@@ -1,6 +1,6 @@
 title: GB/T 7714
 author: lukezed
-version: 0.1.0
+version: 0.1.0-beta.1
 quarto-required: ">=1.4.0"
 contributes:
   filters:
