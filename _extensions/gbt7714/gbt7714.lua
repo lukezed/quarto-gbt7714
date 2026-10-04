@@ -206,7 +206,7 @@ local RAW_FIELDS = { year = true, booktitle = true, holder = true, scale = true,
                      journal = true, journaltitle = true, address = true, location = true, publisher = true,
                      series = true, eprint = true, url = true }
 
--- Fields of one entry body, in order: {braced} (also kept raw as name_braced), "quoted" or bare.
+-- Fields of one entry body, in order: {braced} or "quoted" (also kept raw as name_braced), or bare.
 -- ponytail: no @string expansion or # concatenation; bare macro names are kept verbatim.
 local function bib_fields(body, e)
   local pos = 1
@@ -219,10 +219,10 @@ local function bib_fields(body, e)
       local a, b = body:find('%b{}', pos)
       if not a then return end
       raw = body:sub(a + 1, b - 1); val = raw:gsub('[{}]', ''); pos = b + 1
-    elseif c == '"' then
+    elseif c == '"' then  -- same as {braced}: inner braces still protect text
       local a, b = body:find('^"[^"]*"', pos)
       if not a then return end
-      val = body:sub(a + 1, b - 1); pos = b + 1
+      raw = body:sub(a + 1, b - 1); val = raw:gsub('[{}]', ''); pos = b + 1
     else
       local a, b = body:find('^[^,} \t\r\n]+', pos)
       if not a then return end
