@@ -1098,6 +1098,8 @@
   </citation>
   <bibliography entry-spacing="0" et-al-min="4" et-al-use-first="3" hanging-indent="true">
     <sort>
+      <!-- gbt-sort: bst sort key computed by gbt7714.lua -->
+      <key variable="gbt-sort" />
       <key macro="author" />
       <key macro="date-intext" />
     </sort>
