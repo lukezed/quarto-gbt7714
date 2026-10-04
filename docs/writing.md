@@ -16,7 +16,7 @@
 | 模板 | 使用场景 | PDF / HTML | Word |
 |---|---|---|---|
 | `student` | 课程论文、读书报告、学生作业 | 单栏，包含学号、课程、指导教师 | 可编辑单栏 |
-| `manuscript` | 投稿初稿、导师审阅 | 独立标题页、摘要页、正文；HTML 分区，打印时分页 | 同样分页，正文双倍行距 |
+| `manuscript` | 投稿初稿、导师审阅 | 独立标题页、摘要页、正文；HTML 分区，打印时分页 | 同样分页，正文 25pt 行距 |
 | `journal` | 期刊风格文章、成稿展示 | PDF 双栏；HTML 宽屏双栏、窄屏单栏 | 可编辑单栏 |
 
 源文件分别在 [student](../templates/student/paper.qmd)、[manuscript](../templates/manuscript/paper.qmd)、[journal](../templates/journal/paper.qmd)。先克隆或下载仓库：
@@ -79,17 +79,15 @@ gbt7714: authoryear   # numeric | note 也可
 
 ## 字号与行距
 
-这些是通用写作预设，不代表严格符合 APA、ECNU 或某一期刊的完整版式要求。GB/T 引用适配与正文页面排版是两项独立功能。
+以下是随附写作模板的默认排版参数，可按学校或期刊要求调整。
 
 | 模板 | PDF 正文字号 | PDF 行距配置 | Word 正文 |
 |---|---|---|---|
 | student | 12pt | `linestretch: 1.5` | 12pt、1.5 倍 |
-| manuscript | 12pt | `linestretch: 2` | 12pt、2 倍 |
+| manuscript | 12pt | 固定 25pt | 12pt、25pt（最小值） |
 | journal | 10pt | `linestretch: 1.05` | 12pt、1.5 倍、单栏 |
 
-PDF 的 `linestretch` 是 LaTeX 基础行距的倍率，不能直接当作“字号 × 倍率”，也不能保证与 Word 的同名倍率相等。当前投稿稿 PDF 的 12pt 正文相邻基线约为 29 TeX pt；段间另有 `0.25em` 间距。Word 的倍率由字体和编辑器决定。截图和 PDF 展示的是当前实际效果。
-
-作为比较，[ECNU 模板](https://github.com/sy5938/ecnu_thesis_markdown_template) 在 `_quarto.yml` 选择 12pt，`tex/before-body.tex` 设置 `\baselineskip=25pt`，`tex/preamble.tex` 设置段间距 0、首行缩进 2 字，版心 150 × 230mm；章、节、小节标题用三号、小三、小四黑体。这是该仓库的实现，不能替代学校最新要求。
+投稿稿正文采用 12pt、25pt（最小值） 行距、段间距 0；HTML 使用接近的屏幕阅读行高。不同输出格式的字体和分页仍可能略有差异。
 
 当前 `paper-style` 会设置 PDF 的 `fontsize` 与 `linestretch`；仅在 YAML 覆盖这两项不会生效。需要精确版式时，应修改项目内 `_extensions/gbt7714-paper/layout.lua` 与 `paper.tex`，Word 则修改 `paper-reference.docx` 的对应样式；已有学校模板可以只接入引用扩展。
 

@@ -4,7 +4,8 @@ body {
 }
 #quarto-content { max-width: 960px; margin-inline: auto; }
 main { font-size: 12pt; line-height: 1.5; }
-main:has(.paper-manuscript) { line-height: 2; }
+main:has(.paper-manuscript) { line-height: 2.083333; }
+.paper-manuscript p { margin-block: 0; text-indent: 2em; }
 main:has(.paper-journal) { font-size: 10.5pt; line-height: 1.35; }
 #title-block-header { margin-bottom: 1.5rem; }
 #title-block-header .title { font-size: 1.85rem; line-height: 1.25; }

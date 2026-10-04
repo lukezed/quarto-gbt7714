@@ -1,22 +1,19 @@
 # quarto-gbt7714
 
-面向中文学术写作的 Quarto 扩展：提供 **GB/T 7714—2025 引用与参考文献适配**，以及学生作业、投稿初稿和双栏文章模板，同一份源文件可以输出 Word、PDF 和 HTML。
+**为中文学术写作的 Quarto 模板提供可复用的 GB/T 7714—2025 引用与参考文献接口。** 如果你正在维护某个学校的学位论文模板，或将现有 LaTeX 模板接入 Quarto，可以复用这里的 Lua filter 和 CSL，在自己的封面、章节与排版配置中加入中文引用支持。
+
+本库也附带单栏稿件、双栏文章和课程作业示例，可以直接开始写作，输出 Word、PDF 或 HTML。
 
 ## 为什么做这个项目
 
-这个项目的灵感来自 [apaquarto](https://github.com/wjschne/apaquarto)。它把 APA 写作格式接入 Quarto，让作者可以在同一个写作流程中生成不同格式的文档。我也希望中文写作能有类似的体验：写正文、管理文献，再按需要输出文件。
+灵感来自 [apaquarto](https://github.com/wjschne/apaquarto)：希望中文学术写作也能方便地接入 Quarto。这里把引用处理做成独立扩展，让不同学校和期刊的模板能够复用，并提供完整写作示例作为接入起点。
 
-在尝试把这个流程用于中文学术写作时，我没有找到能直接满足自己设想的组合：中文引用格式、多种输出，以及方便其他模板接入的 Quarto 接口。因此做了这个库，希望把 GB/T 7714 的引用规则接到 Quarto 的 Lua／CSL 工作流中，并提供几套可以直接开始写的模板。
+引用实现参考 [gbt7714-bibtex-style](https://github.com/zepinglee/gbt7714-bibtex-style)，CSL 源自 [zotero-chinese/styles](https://github.com/zotero-chinese/styles)。
 
-引用实现参考了 [zepinglee/gbt7714-bibtex-style](https://github.com/zepinglee/gbt7714-bibtex-style)，CSL 源自 [zotero-chinese/styles](https://github.com/zotero-chinese/styles)。现有中文参考文献工具是这个项目的基础；本库重点处理它们在 Quarto 多格式写作中的衔接。
+## 如何使用
 
-## 可以用来做什么
-
-- **学生作业**：课程论文、读书报告等，填好姓名、学号、课程信息后即可开始写，最后提交 Word 或 PDF。
-- **论文写作与投稿**：用单栏稿件与导师、合作者交流，也可以输出双栏 journal 风格的 PDF。考虑到投稿时可能需要 Word，而不能直接提交 PDF 或 LaTeX，本库同时保留可编辑的 Word 输出；实际版式仍需按目标期刊要求调整。
-- **学校或期刊模板的引用适配**：例如 [ECNU 学位论文模板](https://github.com/sy5938/ecnu_thesis_markdown_template) 这样的项目，可以接入独立的 Lua filter 和 CSL，让引用处理沿用 Quarto 的 citeproc 流程。模板作者可以继续维护自己的封面、章节与页面布局，复用这里的中文引用功能。
-
-仓库提供两部分：`gbt7714` 是可独立使用的引用扩展；`gbt7714-paper` 是调用它的写作排版扩展。学生、作者和模板维护者可以按需要选择。
+- **维护学校或期刊模板**：接入 `gbt7714` 引用扩展，保留自己的版式。配置见[模板适配指南](docs/citations.md)。
+- **直接写作**：使用 `gbt7714-paper` 附带的单栏或双栏模板，按实际提交要求调整。配置见[写作指南](docs/writing.md)。
 
 ## 当前状态与反馈
 
@@ -55,7 +52,7 @@
 <details>
 <summary>投稿初稿预览</summary>
 
-投稿版借鉴 APA 稿件的页面组织：独立标题页 → 独立摘要与关键词页 → 正文新页（重复论文标题），参考文献也另起一页。正文 12pt；PDF 设为 `linestretch: 2`，Word 使用双倍行距。引用格式仍为 GB/T，完整排版参数见[写作指南](docs/writing.md#字号与行距)。
+投稿版借鉴 APA 稿件的页面组织：独立标题页 → 独立摘要与关键词页 → 正文新页（重复论文标题），参考文献也另起一页。正文 12pt，PDF 与 Word 使用 25pt 正文行距。引用格式仍为 GB/T，完整排版参数见[写作指南](docs/writing.md#字号与行距)。
 
 | 标题页 | 摘要页 | 正文首页 |
 |---|---|---|
@@ -72,6 +69,19 @@
 
 ## 快速开始
 
+### 接入现有模板
+
+运行 `quarto add lukezed/quarto-gbt7714`，再添加：
+
+```yaml
+lang: zh
+bibliography: refs.bib
+filters: [gbt7714]
+gbt7714: authoryear  # 也支持 numeric、note
+```
+
+### 直接使用写作模板
+
 安装 [Quarto](https://quarto.org/docs/get-started/) 与 Python 3。PDF 另需含 `ctex` 和 Fandol 字体的 TeX Live／TinyTeX。
 
 ```bash
@@ -83,17 +93,6 @@ quarto render
 ```
 
 将 `manuscript` 换成 `student` 或 `journal` 即可选择其他模板。修改 `paper.qmd` 和 `refs.bib` 后渲染，结果在 `_output/`；匿名版运行 `quarto render --profile blind`，结果在 `_output-blind/`。匿名开关隐藏作者元数据和标记区块，正文与图片里的身份线索仍需自行检查。
-
-### 已有 Quarto 项目
-
-运行 `quarto add lukezed/quarto-gbt7714`，再添加：
-
-```yaml
-lang: zh
-bibliography: refs.bib
-filters: [gbt7714]
-gbt7714: authoryear  # 也支持 numeric、note
-```
 
 ## 详细文档
 

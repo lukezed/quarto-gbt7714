@@ -67,6 +67,11 @@ local function manuscript(doc)
   if pdf then
     append_header(meta, [[
 \usepackage{fancyhdr}
+% Set the normal-text baseline explicitly; do not multiply the class baseline.
+\makeatletter
+\g@addto@macro\normalsize{\setlength{\baselineskip}{25pt}}
+\makeatother
+\AtBeginDocument{\normalsize\setlength{\parskip}{0pt}}
 \pagestyle{fancy}\fancyhf{}\fancyhead[R]{\thepage}
 \renewcommand{\headrulewidth}{0pt}
 \fancypagestyle{plain}{\fancyhf{}\fancyhead[R]{\thepage}\renewcommand{\headrulewidth}{0pt}}
@@ -147,7 +152,7 @@ function Pandoc(doc)
   elseif quarto.doc.is_format('pdf') then
     meta.fontsize = pandoc.MetaString(style == 'journal' and '10pt' or '12pt')
     meta.linestretch = pandoc.MetaString(style == 'student' and '1.5' or
-      (style == 'manuscript' and '2' or '1.05'))
+      (style == 'manuscript' and '1' or '1.05'))
     local affiliations = author_affiliations(meta)
     if #affiliations > 0 and text(meta.blind) ~= 'true' then
       local latex = pandoc.write(pandoc.Pandoc({pandoc.Plain({pandoc.Str(table.concat(affiliations, '；'))})}), 'latex')

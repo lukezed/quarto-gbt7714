@@ -58,7 +58,7 @@ for name in ('ManuscriptTitle', 'ManuscriptAuthor', 'ManuscriptHeading', 'Manusc
     child(style, 'name', val=name)
     child(style, 'basedOn', val='BodyText')
     props = child(style, 'pPr')
-    child(props, 'spacing', before=0, after=0, line=480, lineRule='auto')
+    child(props, 'spacing', before=0, after=0, line=500, lineRule='exact')
     child(props, 'ind', firstLine=0)
     child(props, 'widowControl')
     run = child(style, 'rPr')
@@ -71,6 +71,8 @@ for name in ('ManuscriptTitle', 'ManuscriptAuthor', 'ManuscriptHeading', 'Manusc
         child(props, 'keepNext')
         child(props, 'spacing', before=1440 if name == 'ManuscriptTitle' else 0, after=240)
     if name == 'ManuscriptBody':
+        # Preserve 25pt text spacing while allowing tall display equations.
+        child(props, 'spacing', line=500, lineRule='atLeast')
         child(props, 'ind', firstLine=480)
 
 files['word/styles.xml'] = ET.tostring(styles, encoding='utf-8', xml_declaration=True)
