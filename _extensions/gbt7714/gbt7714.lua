@@ -189,7 +189,8 @@ local RAW_FIELDS = { year = true, booktitle = true, holder = true, scale = true,
                      archiveprefix = true, eprinttype = true,
                      -- bst sort key and set.entry.lang
                      key = true, organization = true, langid = true, language = true, title = true, author = true,
-                     journal = true, journaltitle = true, address = true, location = true, publisher = true }
+                     journal = true, journaltitle = true, address = true, location = true, publisher = true,
+                     series = true }
 
 local function bib_scan(meta)
   local entries, bibs = {}, meta.bibliography
@@ -436,11 +437,19 @@ function Pandoc(doc)
   for _, r in ipairs(refs) do
     local e = raw[r.id] or {}
     local elang = entry_lang(e, r)  -- bst set.entry.lang
-    -- pandoc drops \quad, which GB/T titles use between title elements (信息与文献\quad 资源描述)
-    -- ponytail: rebuilt via the LaTeX reader, so {braced} protection in such titles is lost
-    if e.title_braced and e.title_braced:find('\\quad') then
-      local t = e.title_braced:gsub('\\quad%s*', '\u{2003}')
-      r.title = pandoc.utils.blocks_to_inlines(pandoc.read(t, 'latex').blocks)
+    local cjk = elang == 'zh' or elang == 'ja' or elang == 'ko'  -- bst is.lang.cjk
+    -- Rebuild from the raw bib value when pandoc's reading is lossy:
+    --  * \quad, which GB/T titles use between title elements (信息与文献\quad 资源描述), is dropped;
+    --  * without an English langid pandoc "unTitlecases" title/booktitle/series by the document
+    --    lang, so a Chinese title loses its English capitals (Python -> python). bst keeps them.
+    -- ponytail: via the LaTeX reader, so {braced} protection in English \quad titles is lost
+    for field, var in pairs({ title = 'title', booktitle = 'container-title', series = 'collection-title' }) do
+      local raw_v = e[field .. '_braced']
+      local journal = field == 'booktitle' and PERIODICAL_TYPES[r.type]  -- container is the journal
+      if raw_v and r[var] and not journal and (cjk or raw_v:find('\\quad')) then
+        raw_v = raw_v:gsub('\\quad%s*', '\u{2003}')
+        r[var] = pandoc.utils.blocks_to_inlines(pandoc.read(raw_v, 'latex').blocks)
+      end
     end
     r['gbt-sort'] = bst_sort_key(e, r, elang)
     r.type = BIBTYPE[e.type] or r.type
@@ -474,7 +483,6 @@ function Pandoc(doc)
     end
     if r.type == 'article' and not r.publisher then r.publisher = e.archiveprefix or e.eprinttype end
     local lang = r.language and pandoc.utils.stringify(r.language):lower() or ''
-    local cjk = elang == 'zh' or elang == 'ja' or elang == 'ko'  -- bst is.lang.cjk
     local en = elang == 'en'
     if r.type == 'map' and e.booktitle and not r['container-title'] then  -- map in an atlas
       r['container-title'] = fullwidth_str(en and sentence_case_raw(e.booktitle_braced) or e.booktitle)
