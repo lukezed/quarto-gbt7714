@@ -431,17 +431,25 @@ local function compress(ils)
   return out
 end
 
--- Run citeproc here, so the numbers can be compressed afterwards: Quarto offers no hook after
--- its own citeproc. Cites that are not references (@fig-x, @sec-y) are held back for Quarto's
--- crossref; resolved cites become Span.citation (as pandoc's HTML writer marks them), and the
--- references are dropped from the metadata so a later citeproc pass has nothing to do.
+-- numeric only: run citeproc here so the numbers can be compressed afterwards (every Quarto
+-- filter hook runs before its citeproc). Afterwards the citations are plain inlines (Span.citation
+-- for HTML, as pandoc marks them) and Quarto's own citeproc pass builds the bibliography as usual
+-- (heading, appendix, hover): references are reordered to our numbering with nocite "@*", which
+-- makes that pass number them identically. Other styles need no post-citeproc step.
+-- ponytail: with `citation-location: margin` Quarto needs real Cites, so compression is skipped.
+local CROSSREF = '^%l+%-'  -- @fig-x, @tbl-x, @sec-x...: left for Quarto's crossref
 local function run_citeproc(doc, refs, style)
+  if style ~= 'numeric' or pandoc.utils.stringify(doc.meta['citation-location'] or '') == 'margin' then
+    return doc
+  end
   local known, held = { ['*'] = true }, {}  -- nocite: "@*"
   for _, r in ipairs(refs) do known[r.id] = true end
+  local had_refs, refs_div = false, nil
+  doc:walk({ Div = function(d) if d.identifier == 'refs' then had_refs, refs_div = true, d end end })
   doc = doc:walk({
     Cite = function(c)
       for _, ct in ipairs(c.citations) do
-        if not known[ct.id] then
+        if not known[ct.id] and ct.id:match(CROSSREF) then  -- as without the filter: whole Cite to crossref
           held[#held + 1] = c
           return pandoc.Span({}, { ['gbt-held'] = tostring(#held) })
         end
@@ -449,26 +457,39 @@ local function run_citeproc(doc, refs, style)
     end,
   })
   doc = pandoc.utils.citeproc(doc)
+  local order = {}
+  local html = FORMAT:match('html') ~= nil
   doc = doc:walk({
     Cite = function(c)
       local ids = {}
       for _, ct in ipairs(c.citations) do ids[#ids + 1] = ct.id end
-      local content = c.content
-      if style == 'numeric' then
-        content = content:walk({ Superscript = function(sup)
-          local c2 = compress(sup.content)
-          if c2 then return pandoc.Superscript(c2) end
-        end })
-      end
+      local content = c.content:walk({ Superscript = function(sup)
+        local c2 = compress(sup.content)
+        if c2 then return pandoc.Superscript(c2) end
+      end })
+      if not html then return content end
       return pandoc.Span(content, { class = 'citation', ['data-cites'] = table.concat(ids, ' ') })
     end,
     Span = function(sp)
       local i = sp.attributes['gbt-held']
       if i then return held[tonumber(i)] end
     end,
+    Div = function(d)
+      if d.identifier ~= 'refs' then return nil end
+      for _, e in ipairs(d.content) do
+        local id = e.identifier and e.identifier:match('^ref%-(.+)$')
+        if id then order[#order + 1] = id end
+      end
+      if had_refs then return refs_div end  -- restore; Quarto's pass fills it
+      return {}
+    end,
   })
-  doc.meta.references = nil
-  doc.meta['suppress-bibliography'] = true  -- a second citeproc pass would empty #refs
+  local byid = {}
+  for _, r in ipairs(refs) do byid[r.id] = r end
+  local ordered = {}
+  for _, id in ipairs(order) do ordered[#ordered + 1] = byid[id] end
+  doc.meta.references = ordered
+  doc.meta.nocite = pandoc.MetaInlines({ pandoc.Cite({ pandoc.Str('@*') }, { pandoc.Citation('*', 'NormalCitation') }) })
   return doc
 end
 
@@ -601,6 +622,9 @@ function Pandoc(doc)
   if style == 'note' and doc.meta['notes-after-punctuation'] == nil then
     doc.meta['notes-after-punctuation'] = false
   end
+  -- A user's own CSL gets the data fixes only; the GB/T citation rewrites assume our CSL.
+  local own_csl = doc.meta.csl ~= nil
+    and not pandoc.utils.stringify(doc.meta.csl):match('gbt7714%-%a+%.csl$')
   if doc.meta.csl == nil then
     doc.meta.csl = pandoc.path.join({ dir, 'gbt7714-' .. style .. '.csl' })
   end
@@ -712,6 +736,7 @@ function Pandoc(doc)
   doc.meta.references = refs
   doc.meta.bibliography = nil
   doc = trim_cite_spaces(doc, refs)
+  if own_csl then return doc end
   doc = gbt_cites(doc, refs, style)
   return run_citeproc(doc, refs, style)
 end

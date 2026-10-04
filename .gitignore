@@ -18,3 +18,9 @@ example/book/.quarto/
 # data-cases renders
 example/data-cases/*.html
 example/data-cases/*_files/
+example/arch-cases/*.html
+example/arch-cases/*_files/
+example/arch-cases/*.md
+example/arch-cases/*.txt
+example/arch-cases/*.docx
+example/arch-cases/*.pdf

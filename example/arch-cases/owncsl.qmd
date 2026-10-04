@@ -1,0 +1,9 @@
+---
+lang: zh
+bibliography: refs.bib
+filters: [gbt7714]
+gbt7714: numeric
+csl: own.csl
+---
+
+两篇 [@a; @b]，叙述 @c。

@@ -1,0 +1,16 @@
+---
+title: T2
+author: 张三
+lang: zh
+date: 2024-01-01
+bibliography: refs.bib
+filters: [gbt7714]
+gbt7714: authoryear
+csl: _extensions/gbt7714/gbt7714-authoryear.csl
+citation:
+  type: article-journal
+  container-title: 测试期刊
+  doi: 10.1/x
+---
+
+文 [@a]。

@@ -1,0 +1,10 @@
+---
+title: margin
+lang: zh
+bibliography: refs.bib
+filters: [gbt7714]
+gbt7714: numeric
+citation-location: margin
+---
+
+{{< include _body.qmd >}}

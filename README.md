@@ -49,6 +49,9 @@ gbt7714: authoryear   # authoryear（默认）| numeric | note
   - book 的 **PDF / docx** 完全正常（全书一次 citeproc，numeric 编号跨章连续）；
   - book 的 **HTML** 请不要放 `::: {#refs}` 参考文献页，改为每章末尾显示本章文献（格式正确；numeric 编号章内连续）；
   - 单文档、website 不受影响。
+- **numeric 编号压缩**（`[1-3]`、`[7-8]`）要在 citeproc 之后处理，而 Quarto 的 filter 都在 citeproc 之前运行，所以 numeric 下 filter 先自己跑一次 citeproc 渲染正文引文，文献表仍由 Quarto 照常生成（标题、appendix、悬停预览不受影响）。`citation-location: margin` 时跳过这一步，编号不压缩（`[1–3]`）。
+- **自带 `csl:`**：指向非本扩展的 CSL（如 APA）时，filter 只做数据修正（类型、姓名、标题大小写等），不做 GB/T 专属的引文改写（叙述式、上标页码、编号压缩）。
+- **`appendix-cite-as`**（文章自身的"引用格式"）由 Quarto 在 filter 之前生成，只认 YAML 里的 `csl:`；要让它也用 GB/T 格式，显式写 `csl: _extensions/gbt7714/gbt7714-authoryear.csl`（或对应体例）。
 - 只扫描 `.bib` 文件补字段；CSL-JSON / YAML 文献库可用，但 bib 专有字段（`key`、`langid` 等）自然没有。
 
 ## 工作原理

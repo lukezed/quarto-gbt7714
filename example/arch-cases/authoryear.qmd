@@ -1,0 +1,9 @@
+---
+title: authoryear
+lang: zh
+bibliography: refs.bib
+filters: [gbt7714]
+gbt7714: authoryear
+---
+
+{{< include _body.qmd >}}
