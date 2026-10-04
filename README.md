@@ -16,39 +16,43 @@ filters: [gbt7714]
 gbt7714: authoryear   # authoryear（默认）| numeric | note
 ```
 
+- 不需要设置 `lang`：中文条目的"等""佚名"等不依赖文档语言。
+- 中文条目要按拼音排序，需在 bib 中提供 `key` 字段（如 `key = {wang2 ming2}`），与 upstream bst 相同；没有 `key` 的中文条目按码位排在其后。
+- 正文页码写 `[@key, 42]` 或 `[@key, p. 42]`，输出为上标页码（`[1]⁴²`、`（Boobier，2020）⁴²`）。
+
 ## 工作原理
 
-- `_extensions/gbt7714/gbt7714-*.csl`：由 [zotero-chinese/styles](https://github.com/zotero-chinese/styles) 的 2025 双语 CSL-M 样式经 `tools/cslm2csl.py` 转成 pandoc 可用的 CSL 1.0，再按 golden test 修正。
-- `gbt7714.lua`：
-  - 按选项设置 `csl`；
-  - 给含 CJK 的条目设置 `language`，CSL 据此分中英文分支（"等" / "et al."）；
-  - 英文标题按 bst `change.case$ "t"` 转成 sentence case；
-  - 修正 pandoc 丢失的 biblatex 类型（`@standard`、`@map`、`@preprint`、`@archive` 等）。
+- `_extensions/gbt7714/gbt7714-*.csl`：最初由 [zotero-chinese/styles](https://github.com/zotero-chinese/styles) 的 2025 双语 CSL-M 样式经 `tools/cslm2csl.py` 转换（仅作出处记录，**不要重跑**），此后 CSL 文件本身就是源码，按 golden test 修正。
+- `gbt7714.lua`：补上 CSL 和 pandoc 做不到的部分，规则都照搬 bst：
+  - 语言判断（`set.entry.lang`）、中英文分支、排序 key（`presort`）；
+  - 英文标题 sentence case、全角标点、姓名格式（拼音名不缩写等）、版次与卷；
+  - 补回 pandoc 读 bib 时丢失的类型与字段（`@standard`、`@map`、`@preprint`、专利权人、比例尺、CSTR、`\quad` 等）；
+  - 正文引文：叙述式 `@key`、上标页码。
 
 ## Golden test
 
 ```bash
-python3 test/compare.py authoryear   # 或 numeric；加 -v 显示逐条差异
+python3 test/compare.py authoryear   # 或 numeric / cite-authoryear / cite-numeric；加 -v 显示逐条差异
 ```
 
 用 upstream bst（`test/upstream/`）与本 CSL 分别渲染 GB/T 7714—2025 标准原文的 344 条示例（`gbt7714-examples.bib`），逐条比对。upstream 更新时，替换 `test/upstream/` 后重跑。
 
-当前：numeric 138/344，authoryear 116/344 条一致。
+当前（严格比对）：
+
+| 对比 | 一致 |
+|---|---|
+| 文献表 numeric | 343/344 |
+| 文献表 authoryear | 339/344 |
+| 正文引文 numeric（`cite-numeric`） | 14/16 |
+| 正文引文 authoryear（`cite-authoryear`） | 16/16 |
 
 ## 已知差异（TODO）
 
-- [ ] authoryear 排序：upstream 中文在前，CSL 目前英文在前
-- [ ] 引文中的页码：GB/T 7714 用上标（`[2]⁴²`、`(Smith et al., 2020)⁴²`），目前是 `[2, p. 42]`
-- [ ] authoryear 引文标点（全角/半角）需要对照 `gbt7714.sty` 的 natbib 设置；golden test 目前只比对文献表，不比对正文引文
-- [ ] 标准 `[S]`：2025 版改为"编号 + 标题"、不著录责任者
-- [ ] 有 URL 时 bst 不输出 DOI；CSL 两者都输出
-- [ ] 版本：`2 版` / `5th ed.`（CSL 输出 `Second` / `Fifth`）
-- [ ] 卷：`第 4 卷`（CSL-M 的 `第%s卷` term 需改写）
-- [ ] 会议录 `@proceedings`、档案、舆图的著录细节
-- [ ] `{TeX}book` 这类词内括号保护被 pandoc 丢失
-- [ ] 中文按拼音排序：需要 `lang: zh-u-co-pinyin`，但这样 Quarto 会报 translations warning
-- [ ] 只有作者等局部元素的"片段"示例（标准第 7 章）CSL 会多输出 `[M]`
-- [ ] 注释体例：没有 upstream bst 可以对照，要按标准原文核对（同上、重复引用、`notes-after-punctuation`）
+- [ ] numeric 连续编号：pandoc citeproc 输出 `[7,8]`、`[1–3]`，upstream 是 `[7-8]`、`[1-3]`（需在 citeproc 之后加 post filter）
+- [ ] authoryear 消歧后缀：bst 把"[2025]"（无出版年）与"2025"分开计，citeproc 合并计（4 条）
+- [ ] 丛书名 + 卷 + 书名的片段示例 `中国科学技术史：第二卷 科学思想史`（1 条）
+- [ ] 同姓不同名作者的正文引文消歧（filter 自拼的作者名）
+- [ ] 注释体例待定：重复引用"同N"（upstream）还是"同上"；脚注内 3 人以上是否加"等"；是否输出文末文献表；`notes-after-punctuation` 默认值。用例见 `example/note-cases.qmd`
 
 ## License
 
