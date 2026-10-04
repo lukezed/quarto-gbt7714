@@ -2,7 +2,7 @@
 
 单篇 [@zhang2019]；多篇连续 [@zhang2019; @wang2015; @smith2020]；叙述式 @wang2015 认为如此；英文叙述 @smith2020 指出。
 
-带前缀：[见 @boobier2020]。隐藏作者：王明 [-@wang2015] 提出。同作者同年：[@zhang2023a; @zhang2023b]。
+带前缀：[见 @boobier2020]；中文前缀 [参见 @zhang2019]。隐藏作者：王明 [-@wang2015] 提出。同作者同年：[@zhang2023a; @zhang2023b]。
 
 ## 2 页码与 locator
 

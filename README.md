@@ -88,10 +88,11 @@ python3 test/test_bib_scan.py      # bib 原文扫描的边界情况
 
 ## 纯 pandoc 用法
 
-filter 自己调用 citeproc，不要再加 `--citeproc`（否则 pandoc 会先用默认样式跑一遍）：
+`-L` 必须写在 `--citeproc` **之前**（与 Quarto 相同：先跑 filter，再由 citeproc 生成文献表）：
 
 ```bash
-pandoc paper.md --bibliography refs.bib -M gbt7714=numeric -L _extensions/gbt7714/gbt7714.lua -o paper.docx
+pandoc paper.md --bibliography refs.bib -M gbt7714=numeric \
+  -L _extensions/gbt7714/gbt7714.lua --citeproc -o paper.docx
 ```
 
 ## 已知差异（TODO）

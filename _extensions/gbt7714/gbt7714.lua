@@ -314,10 +314,12 @@ end
 local function cjk_side(cp)
   return is_cjk_cp(cp) or (cp ~= nil and ((cp >= 0x2014 and cp <= 0x201F) or cp == 0x2026))
 end
+-- First/last code point of an inline; looks into Link/Span/Emph/... (link-citations wraps names in links).
 local function edge_cp(el, last)
-  if not el or el.t ~= 'Str' then return nil end
+  if not el or el.t == 'Space' or el.t == 'SoftBreak' or el.t == 'LineBreak' then return nil end
+  local text = el.t == 'Str' and el.text or (el.content and pandoc.utils.stringify(el)) or ''
   local cp
-  for _, c in utf8.codes(el.text) do
+  for _, c in utf8.codes(text) do
     cp = c
     if not last then break end
   end
@@ -464,8 +466,42 @@ end
 -- makes that pass number them identically. Other styles need no post-citeproc step.
 -- ponytail: with `citation-location: margin` Quarto needs real Cites, so compression is skipped.
 local CROSSREF = '^%l+%-'  -- @fig-x, @tbl-x, @sec-x...: left for Quarto's crossref
+-- citeproc puts a space after a citation prefix ("见 博伯尔"); Chinese takes none.
+-- The prefix end is marked before citeproc, so only that space goes ("张三 等" keeps its own).
+local PREFIX_END = '\u{E000}'  -- private use, never in real text
+local function mark_prefixes(doc)
+  return doc:walk({ Cite = function(c)
+    for _, ct in ipairs(c.citations) do
+      if #ct.prefix > 0 then ct.prefix:insert(pandoc.Str(PREFIX_END)) end
+    end
+    return c
+  end })
+end
+local function drop_prefix_spaces(ils)
+  local out, i = pandoc.Inlines({}), 1
+  while i <= #ils do
+    local el = ils[i]
+    if el.t == 'Str' and el.text:find(PREFIX_END, 1, true) then
+      local text = el.text:gsub(PREFIX_END, '')
+      if text ~= '' then out:insert(pandoc.Str(text)) end
+      local nxt = ils[i + 1]
+      if nxt and nxt.t == 'Space' and cjk_side(edge_cp(out[#out], true)) and cjk_side(edge_cp(ils[i + 2], false)) then
+        i = i + 1  -- skip the space citeproc added
+      end
+    else
+      out:insert(el)
+    end
+    i = i + 1
+  end
+  return out
+end
+
+-- Render citations ourselves (Quarto has no hook after its own citeproc), so we can post-process
+-- them: numeric compression, prefix spaces. The bibliography is left to Quarto's citeproc via
+-- `nocite: "@*"` over the references actually listed, in our numbering order.
+-- Margin citations need Quarto's own pass, so they are left alone.
 local function run_citeproc(doc, refs, style)
-  if style ~= 'numeric' or pandoc.utils.stringify(doc.meta['citation-location'] or '') == 'margin' then
+  if pandoc.utils.stringify(doc.meta['citation-location'] or '') == 'margin' then
     return doc
   end
   local known, held = { ['*'] = true }, {}  -- nocite: "@*"
@@ -482,17 +518,20 @@ local function run_citeproc(doc, refs, style)
       end
     end,
   })
-  doc = pandoc.utils.citeproc(doc)
+  doc = pandoc.utils.citeproc(mark_prefixes(doc))
   local order = {}
   local html = FORMAT:match('html') ~= nil
   doc = doc:walk({
     Cite = function(c)
       local ids = {}
       for _, ct in ipairs(c.citations) do ids[#ids + 1] = ct.id end
-      local content = c.content:walk({ Superscript = function(sup)
-        local c2 = compress(sup.content)
-        if c2 then return pandoc.Superscript(c2) end
-      end })
+      local content = c.content:walk({
+        Superscript = function(sup)
+          local c2 = style == 'numeric' and compress(sup.content)
+          if c2 then return pandoc.Superscript(c2) end
+        end,
+        Inlines = drop_prefix_spaces,
+      })
       if not html then return content end
       return pandoc.Span(content, { class = 'citation', ['data-cites'] = table.concat(ids, ' ') })
     end,
@@ -745,19 +784,5 @@ function Pandoc(doc)
   if own_csl then return doc end
   doc = gbt_cites(doc, refs, style)
   doc = run_citeproc(doc, refs, style)
-  if style == 'note' then
-    -- citeproc puts a space after a citation prefix ("见 博伯尔"); Chinese takes none
-    doc = doc:walk({ Note = function(n)
-      return n:walk({ Inlines = function(ils)
-        local out = pandoc.Inlines({})
-        for i, el in ipairs(ils) do
-          if not (el.t == 'Space' and is_cjk_cp(edge_cp(ils[i - 1], true)) and is_cjk_cp(edge_cp(ils[i + 1], false))) then
-            out:insert(el)
-          end
-        end
-        return out
-      end })
-    end })
-  end
   return doc
 end

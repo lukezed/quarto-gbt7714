@@ -30,9 +30,10 @@ CJK = r'[\u3000-\u9fff\uff00-\uffef]'
 PANDOC = ['quarto', 'pandoc'] if shutil.which('quarto') else ['pandoc']
 
 def pandoc(md, *meta):
+    # filter first, then citeproc: the order Quarto runs them in
     args = [a for m in meta for a in ('-M', m)]
-    r = subprocess.run(PANDOC + ['-f', 'markdown', '-t', 'html', '--wrap=none', '-M', f'bibliography={BIB}',
-                                 *args, '-L', os.path.join(EXT, 'gbt7714.lua')],
+    r = subprocess.run(PANDOC + ['-f', 'markdown', '-t', 'html', '--wrap=none', '-M', f'bibliography={BIB}', '-M', 'link-citations=true',
+                                 *args, '-L', os.path.join(EXT, 'gbt7714.lua'), '--citeproc'],
                        input=md, capture_output=True, text=True)
     if r.returncode: sys.exit(r.stderr)
     return r.stdout
