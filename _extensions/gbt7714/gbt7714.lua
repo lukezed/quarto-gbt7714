@@ -620,7 +620,9 @@ function Pandoc(doc)
     for field, var in pairs({ title = 'title', booktitle = 'container-title', series = 'collection-title' }) do
       local raw_v = e[field .. '_braced']
       local journal = field == 'booktitle' and PERIODICAL_TYPES[r.type]  -- container is the journal
-      if raw_v and r[var] and not journal and (cjk or raw_v:find('\\quad')) then
+      -- a periodical's title is a journal name: bst keeps its case, pandoc sentence-cases it
+      local keep = cjk or raw_v and raw_v:find('\\quad') or (field == 'title' and e.type == 'periodical')
+      if raw_v and r[var] and not journal and keep then
         raw_v = raw_v:gsub('\\quad%s*', '\u{2003}')
         r[var] = pandoc.utils.blocks_to_inlines(pandoc.read(raw_v, 'latex').blocks)
       end
