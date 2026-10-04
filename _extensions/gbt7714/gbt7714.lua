@@ -255,30 +255,42 @@ local function bib_scan(meta)
   return entries
 end
 
--- Page locator in a citation suffix (", 42", ", p. 42", ", pp. 11-13"), or nil.
-local function page_locator(suffix)
+-- Citation suffix as bst prints a \citep[post] note: page labels dropped (GB/T pages carry
+-- no "p."), anything else kept as written ("第2章", "chap. 3"). Returns text and whether it is a page.
+local function postnote(suffix)
   local s = pandoc.utils.stringify(suffix or {}):gsub('\194\160', ' ')  -- pandoc puts nbsp after "pp."
-  s = s:gsub('^%s*,?%s*', ''):gsub('%s*$', '')
-  s = s:gsub('^[Pp]+%.%s*', ''):gsub('^pages?%s+', '')
-  s = s:gsub('^页%s*', ''):gsub('^第%s*(.-)%s*页$', '%1'):gsub('%s*页$', '')  -- 页 50 / 第50页 / 50页
-  return s:gsub('–', '-'):match('^%d[%d%-, ]*$')
+  -- ASCII whitespace only: Lua's %s can match UTF-8 continuation bytes (0x85, 0xA0; 章 = E7 AB A0)
+  s = s:gsub('^[ \t\r\n]*,?[ \t\r\n]*', ''):gsub('[ \t\r\n]*$', '')
+  if s == '' then return nil end
+  local p = s:gsub('^[Pp]+%.[ \t]*', ''):gsub('^pages?[ \t]+', '')
+  p = p:gsub('^页[ \t]*', ''):gsub('^第[ \t]*(.-)[ \t]*页$', '%1'):gsub('[ \t]*页$', '')  -- 页 50 / 第50页 / 50页
+  p = p:gsub('–', '-')
+  if p:match('^%d[%d%-, ]*$') then return p, true end
+  return s, false
 end
 
--- In-text author like the CSL's (et-al-min 2): "Falout et al." / "张群 等".
--- ponytail: no given-name disambiguation; add if two cited authors share a family name.
+-- In-text author as bst format.lab.name: "{vv~}{ll}", CJK given names appended ("张三");
+-- "等"/"et al." after the first of 2+ names; no author -> 佚名/Anon (the CSL's anonymous term).
 local function intext_author(r)
-  local names = r and (r.author or r.editor)
-  if not names or #names == 0 then return nil end
+  if not r then return nil end
+  local names = r.author or r.editor
+  if not names or #names == 0 then return r.language and '佚名' or 'Anon' end
   local n = names[1]
   local name = n.literal or n.family
   if not name then return nil end
-  if n['non-dropping-particle'] then name = n['non-dropping-particle'] .. ' ' .. name end
+  local von = n['dropping-particle'] or n['non-dropping-particle']
+  if von then name = von .. ' ' .. name end
+  if n.given and has_cjk(name) and has_cjk(n.given) then name = name .. n.given end
   if #names > 1 then name = name .. (r.language and ' 等' or ' et al.') end
   return name
 end
 
 -- Chinese text takes no space around a citation ("再生产 [@a] 认为" -> "再生产[@a]认为").
 -- xeCJK drops such spaces in PDF; HTML and Word would keep them, so drop them here.
+-- CJK text plus the punctuation Chinese shares with English (——“”‘’…); not for language detection.
+local function cjk_side(cp)
+  return is_cjk_cp(cp) or (cp ~= nil and ((cp >= 0x2014 and cp <= 0x201F) or cp == 0x2026))
+end
 local function edge_cp(el, last)
   if not el or el.t ~= 'Str' then return nil end
   local cp
@@ -302,10 +314,10 @@ local function trim_cite_spaces(doc, refs)
       local out = pandoc.Inlines({})
       for i, el in ipairs(ils) do
         local drop = false
-        if el.t == 'Space' then
+        if el.t == 'Space' or el.t == 'SoftBreak' then
           local prev, nxt = ils[i - 1], ils[i + 1]
-          drop = (nxt and nxt.t == 'Cite' and not opens_latin(nxt) and is_cjk_cp(edge_cp(prev, true)))
-              or (prev and prev.t == 'Cite' and is_cjk_cp(edge_cp(nxt, false)))
+          drop = (nxt and nxt.t == 'Cite' and not opens_latin(nxt) and cjk_side(edge_cp(prev, true)))
+              or (prev and prev.t == 'Cite' and cjk_side(edge_cp(nxt, false)))
         end
         if not drop then out:insert(el) end
       end
@@ -314,36 +326,150 @@ local function trim_cite_spaces(doc, refs)
   })
 end
 
--- GB/T 7714 citation forms the CSL cannot express (bst \citet and locator placement):
---   @key          -> Author + citation with author suppressed: "Boobier（2020）", "Boobier[1]"
---   [@key, 42]    -> page as a superscript after the closing bracket: "（Boobier，2020）⁴²", "[1]⁴²"
+-- GB/T 7714 citation forms the CSL cannot express (bst \citet and \citep[post] placement):
+--   @key            -> Author + citation with author suppressed: "Boobier（2020）", "Boobier[1]"
+--   [@key, 42]      -> postnote as a superscript after the closing bracket: "（Boobier，2020）⁴²", "[1]⁴²"
+--   [@a, 5; @b, 7]  -> one citation each, as bst would print \citep[5]{a}\citep[7]{b}
+--   [见 @key]       -> numeric: prefix outside the superscript, "见[1]"
 -- Note style: @key -> Author + normal citation, so the note keeps the full entry (citeproc
 -- would move the author list into the prose, and drop the name on "同N" repeats).
-local function gbt_cites(doc, refs, note)
+local function gbt_cites(doc, refs, style)
+  local note, numeric = style == 'note', style == 'numeric'
   local byid = {}
   for _, r in ipairs(refs) do byid[r.id] = r end
+  local function one(ct)
+    local out = pandoc.Inlines({})
+    if ct.mode == 'AuthorInText' then
+      local a = intext_author(byid[ct.id])
+      if a then out:insert(pandoc.Str(a)); ct.mode = note and 'NormalCitation' or 'SuppressAuthor' end
+    end
+    local post, page = postnote(ct.suffix)
+    if note then
+      -- under lang: zh citeproc only knows "页"; a bare number is read as a page locator
+      if post then
+        ct.suffix = page and pandoc.Inlines({ pandoc.Str(','), pandoc.Space(), pandoc.Str(post) })
+          or pandoc.Inlines({ pandoc.Str('，' .. post) })
+      end
+      out:insert(pandoc.Cite({}, { ct })); return out
+    end
+    if numeric and #ct.prefix > 0 then
+      out:extend(ct.prefix); ct.prefix = pandoc.Inlines({})
+    end
+    if post then ct.suffix = pandoc.Inlines({}) end
+    out:insert(pandoc.Cite({}, { ct }))
+    if post then out:insert(pandoc.Superscript({ pandoc.Str(post) })) end
+    return out
+  end
   return doc:walk({
     Cite = function(c)
-      if #c.citations ~= 1 then return nil end
-      local ct = c.citations[1]
+      local split = #c.citations == 1
+      for _, ct in ipairs(c.citations) do split = split or postnote(ct.suffix) ~= nil end
+      if not split then
+        local pre = c.citations[1].prefix
+        if not (numeric and #pre > 0) then return nil end
+        c.citations[1].prefix = pandoc.Inlines({})  -- [见 @a; @b] -> 见[1,2]
+        local out = pandoc.Inlines(pre); out:insert(pandoc.Cite({}, c.citations)); return out
+      end
+      if note and #c.citations > 1 then  -- keep one note; only normalize each postnote
+        for _, ct in ipairs(c.citations) do
+          local post, page = postnote(ct.suffix)
+          if post then
+            ct.suffix = page and pandoc.Inlines({ pandoc.Str(','), pandoc.Space(), pandoc.Str(post) })
+              or pandoc.Inlines({ pandoc.Str('，' .. post) })
+          end
+        end
+        return c
+      end
       local out = pandoc.Inlines({})
-      if ct.mode == 'AuthorInText' then
-        local a = intext_author(byid[ct.id])
-        if a then out:insert(pandoc.Str(a)); ct.mode = note and 'NormalCitation' or 'SuppressAuthor' end
-      end
-      local loc = page_locator(ct.suffix)
-      if note then
-        -- under lang: zh citeproc only knows "页"; a bare number is read as a page locator
-        if loc then ct.suffix = pandoc.Inlines({ pandoc.Str(','), pandoc.Space(), pandoc.Str(loc) }) end
-        c.citations = { ct }; out:insert(c); return out
-      end
-      if loc then ct.suffix = pandoc.Inlines({}) end
-      c.citations = { ct }
-      out:insert(c)
-      if loc then out:insert(pandoc.Superscript({ pandoc.Str(loc) })) end
+      for _, ct in ipairs(c.citations) do out:extend(one(ct)) end
       return out
     end,
   })
+end
+
+-- bst/natbib compress: runs of 2+ consecutive numbers become "a-b" with a hyphen, written
+-- order kept ("[7-8]", "[1-2,6]", "[6,1,4]"); citeproc gives "[7,8]", "[1–3]".
+-- Works on the bracket's inlines, so link-citations (each number a Link) survive.
+local function compress(ils)
+  local s = pandoc.utils.stringify(ils)
+  if not s:match('^%[[%d,%-\226\128\147]+%]$') then return nil end
+  local toks = {}  -- { n = number, il = inline or nil }
+  local dash = false
+  for _, il in ipairs(ils) do
+    local t = pandoc.utils.stringify(il)
+    if il.t == 'Link' then
+      local n = tonumber(t)
+      if dash and #toks > 0 then
+        for i = toks[#toks].n + 1, n - 1 do toks[#toks + 1] = { n = i } end
+      end
+      toks[#toks + 1] = { n = n, il = il }; dash = false
+    else
+      t = t:gsub('\226\128\147', '-')
+      for num, d in t:gmatch('(%d*)(%-?)') do
+        if num ~= '' then
+          local n = tonumber(num)
+          if dash and #toks > 0 then
+            for i = toks[#toks].n + 1, n - 1 do toks[#toks + 1] = { n = i } end
+          end
+          toks[#toks + 1] = { n = n }; dash = false
+        end
+        if d == '-' then dash = true end
+      end
+    end
+  end
+  local function show(tk) return tk.il or pandoc.Str(tostring(tk.n)) end
+  local out, i = pandoc.Inlines({ pandoc.Str('[') }), 1
+  while i <= #toks do
+    local j = i
+    while toks[j + 1] and toks[j + 1].n == toks[j].n + 1 do j = j + 1 end
+    if i > 1 then out:insert(pandoc.Str(',')) end
+    out:insert(show(toks[i]))
+    if j > i then out:insert(pandoc.Str('-')); out:insert(show(toks[j])) end
+    i = j + 1
+  end
+  out:insert(pandoc.Str(']'))
+  return out
+end
+
+-- Run citeproc here, so the numbers can be compressed afterwards: Quarto offers no hook after
+-- its own citeproc. Cites that are not references (@fig-x, @sec-y) are held back for Quarto's
+-- crossref; resolved cites become Span.citation (as pandoc's HTML writer marks them), and the
+-- references are dropped from the metadata so a later citeproc pass has nothing to do.
+local function run_citeproc(doc, refs, style)
+  local known, held = { ['*'] = true }, {}  -- nocite: "@*"
+  for _, r in ipairs(refs) do known[r.id] = true end
+  doc = doc:walk({
+    Cite = function(c)
+      for _, ct in ipairs(c.citations) do
+        if not known[ct.id] then
+          held[#held + 1] = c
+          return pandoc.Span({}, { ['gbt-held'] = tostring(#held) })
+        end
+      end
+    end,
+  })
+  doc = pandoc.utils.citeproc(doc)
+  doc = doc:walk({
+    Cite = function(c)
+      local ids = {}
+      for _, ct in ipairs(c.citations) do ids[#ids + 1] = ct.id end
+      local content = c.content
+      if style == 'numeric' then
+        content = content:walk({ Superscript = function(sup)
+          local c2 = compress(sup.content)
+          if c2 then return pandoc.Superscript(c2) end
+        end })
+      end
+      return pandoc.Span(content, { class = 'citation', ['data-cites'] = table.concat(ids, ' ') })
+    end,
+    Span = function(sp)
+      local i = sp.attributes['gbt-held']
+      if i then return held[tonumber(i)] end
+    end,
+  })
+  doc.meta.references = nil
+  doc.meta['suppress-bibliography'] = true  -- a second citeproc pass would empty #refs
+  return doc
 end
 
 -- Raw .bib fields the bst sorts on but pandoc drops or reshapes (key, year, langid, ...).
@@ -586,6 +712,6 @@ function Pandoc(doc)
   doc.meta.references = refs
   doc.meta.bibliography = nil
   doc = trim_cite_spaces(doc, refs)
-  doc = gbt_cites(doc, refs, style == 'note')
-  return doc
+  doc = gbt_cites(doc, refs, style)
+  return run_citeproc(doc, refs, style)
 end

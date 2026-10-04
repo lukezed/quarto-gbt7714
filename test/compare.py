@@ -145,7 +145,9 @@ def cite_main(style, verbose):
     b, c = cite_bst(style), cite_csl(style)
     if len(b) < len(CITES): sys.exit(f'only {len(b)}/{len(CITES)} bst lines found; LaTeX side broken?')
     sup = lambda v: norm(v.replace(')^(', ''))  # merge adjacent superscript runs
-    b = {k: sup(v) for k, v in b.items()}
+    # xeCJK glue between CJK and Latin shows up as a space in pdftotext; not a character
+    glue = lambda v: re.sub(rf'(?<={CJK}) (?=[!-~])|(?<=[!-~]) (?={CJK})', '', v)
+    b = {k: glue(sup(v)) for k, v in b.items()}
     c = {k: sup(v) for k, v in c.items()}
     same = [k for k in b if c.get(k) == b[k]]
     print(f'cite-{style}: {len(same)}/{len(CITES)} citations identical (bst lines found: {len(b)})')
