@@ -341,15 +341,8 @@
   <macro name="volume">
     <choose>
       <if type="article article-journal article-magazine article-newspaper periodical" match="none">
-        <choose>
-          <if is-numeric="volume">
-            <label variable="volume" form="short" />
-            <text variable="volume" />
-          </if>
-          <else>
-            <text variable="volume" />
-          </else>
-        </choose>
+        <!-- formatted by gbt7714.lua (bst format.bvolume) -->
+        <text variable="volume" />
       </if>
     </choose>
   </macro>
@@ -357,15 +350,8 @@
   <macro name="volume-en">
     <choose>
       <if type="article article-journal article-magazine article-newspaper periodical" match="none">
-        <choose>
-          <if is-numeric="volume">
-            <text value="v." />
-            <text variable="volume" />
-          </if>
-          <else>
-            <text variable="volume" />
-          </else>
-        </choose>
+        <!-- formatted by gbt7714.lua (bst format.bvolume) -->
+        <text variable="volume" />
       </if>
     </choose>
   </macro>

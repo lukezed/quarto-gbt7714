@@ -155,6 +155,9 @@ local function format_name(n)
   return n
 end
 
+local PERIODICAL_TYPES = { article = true, ['article-journal'] = true, ['article-magazine'] = true,
+                          ['article-newspaper'] = true, periodical = true }
+
 -- container-title holds the bst `booktitle` for these types (sentence-cased like title).
 local BOOKTITLE_TYPES = { chapter = true, ['paper-conference'] = true,
                           ['entry-dictionary'] = true, ['entry-encyclopedia'] = true }
@@ -228,6 +231,13 @@ function Pandoc(doc)
     local lang = r.language and pandoc.utils.stringify(r.language):lower() or ''
     local cjk = is_cjk(r)
     r.edition = edition(r.edition, cjk, lang)
+    if r.volume and not PERIODICAL_TYPES[r.type] then  -- bst format.bvolume (books, maps, ...)
+      local v = pandoc.utils.stringify(r.volume)
+      if v:match('^%d+$') then
+        r.volume = (lang:match('^ko') or lang == 'korean') and ('제 ' .. v .. ' 권')
+          or cjk and ('第 ' .. v .. ' 卷') or ('v.' .. v)
+      end
+    end
     if cjk then
       r.language = 'zh'
     else
