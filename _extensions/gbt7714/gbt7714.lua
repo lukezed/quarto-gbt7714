@@ -165,22 +165,36 @@ local BIBTYPE = {
   periodical = 'periodical', proceedings = 'paper-conference',
 }
 
--- ponytail: regex scan of .bib files for `@type{key,`; CSL-JSON/YAML bibs carry correct types already.
-local function bib_types(meta)
-  local types, bibs = {}, meta.bibliography
-  if bibs == nil then return types end
+-- ponytail: regex scan of .bib files for `@type{key, field = {value}, ...}`; CSL-JSON/YAML bibs
+-- carry correct types already. Ceiling: values must be {braced} (not "quoted" or bare macros).
+-- Returns key -> { type = biblatex type, <field> = raw value } for fields pandoc drops.
+local RAW_FIELDS = { holder = true, scale = true, dimensions = true, cstr = true, eid = true,
+                     archiveprefix = true, eprinttype = true }
+
+local function bib_scan(meta)
+  local entries, bibs = {}, meta.bibliography
+  if bibs == nil then return entries end
   if pandoc.utils.type(bibs) ~= 'List' then bibs = { bibs } end
   for _, b in ipairs(bibs) do
     local path = pandoc.utils.stringify(b)
     local f = path:match('%.bib$') and io.open(path)
     if f then
-      for t, k in f:read('a'):gmatch('@(%w+)%s*{%s*([^,%s]+)%s*,') do
-        types[k] = BIBTYPE[t:lower()]
-      end
+      local text = '\n' .. f:read('a')
       f:close()
+      for chunk in text:gsub('\n@', '\0@'):gmatch('%z@([^%z]*)') do
+        local t, k, body = chunk:match('^(%w+)%s*{%s*([^,%s]+)%s*,(.*)$')
+        if not t then goto continue end
+        local e = { type = t:lower() }
+        for name, val in body:gmatch('([%w_-]+)%s*=%s*(%b{})') do
+          name = name:lower()
+          if RAW_FIELDS[name] then e[name] = val:sub(2, -2):gsub('[{}]', '') end
+        end
+        entries[k] = e
+        ::continue::
+      end
     end
   end
-  return types
+  return entries
 end
 
 function Pandoc(doc)
@@ -194,9 +208,23 @@ function Pandoc(doc)
 
   local refs = pandoc.utils.references(doc)
   if #refs == 0 then return doc end
-  local types = bib_types(doc.meta)
+  local raw = bib_scan(doc.meta)
   for _, r in ipairs(refs) do
-    r.type = types[r.id] or r.type
+    local e = raw[r.id] or {}
+    r.type = BIBTYPE[e.type] or r.type
+    -- fields pandoc drops; bst uses holder (patent assignee) in place of the inventors
+    if e.holder then
+      r.author = {}
+      for h in (e.holder .. ' and '):gmatch('(.-)%s+and%s+') do table.insert(r.author, { literal = h }) end
+    end
+    r.scale = r.scale or e.scale
+    r.dimensions = r.dimensions or (e.dimensions and e.dimensions:gsub('\\,', '\u{2009}'))
+    if e.cstr then  -- bst format.doi: CSTR replaces DOI, and is omitted when the URL contains it
+      r.doi = nil
+      if not (r.url and pandoc.utils.stringify(r.url):find(e.cstr, 1, true)) then r.CSTR = e.cstr end
+    end
+    if not r.page and e.eid then r.page = e.eid end
+    if r.type == 'article' and not r.publisher then r.publisher = e.archiveprefix or e.eprinttype end
     local lang = r.language and pandoc.utils.stringify(r.language):lower() or ''
     local cjk = is_cjk(r)
     r.edition = edition(r.edition, cjk, lang)
