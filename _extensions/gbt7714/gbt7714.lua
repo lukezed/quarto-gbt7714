@@ -6,10 +6,21 @@
 local dir = pandoc.path.directory(PANDOC_SCRIPT_FILE)
 local STYLES = { authoryear = true, numeric = true, note = true }
 
--- ponytail: CJK = UTF-8 lead bytes E3-E9 (U+3000-U+9FFF, incl. kana); misses rare Ext-B names.
+-- The one CJK range (Han incl. Ext A/B+, kana, Hangul, CJK and full-width punctuation).
+-- `script_of` below is separate on purpose: it mirrors bst get.str.lang's per-script ranks.
+local function is_cjk_cp(cp)
+  return cp ~= nil and ((cp >= 0x1100 and cp <= 0x11FF) or (cp >= 0x2E80 and cp <= 0x9FFF)
+    or (cp >= 0xA960 and cp <= 0xA97F) or (cp >= 0xAC00 and cp <= 0xD7AF)
+    or (cp >= 0xF900 and cp <= 0xFAFF) or (cp >= 0xFF00 and cp <= 0xFFEF)
+    or (cp >= 0x20000 and cp <= 0x3FFFF))
+end
+
 local function has_cjk(v)
   local s = type(v) == 'string' and v or pandoc.utils.stringify(v or '')
-  return s:find('[\227-\233][\128-\191][\128-\191]') ~= nil
+  for _, cp in utf8.codes(s, true) do
+    if is_cjk_cp(cp) then return true end
+  end
+  return false
 end
 
 -- Mirror bst `change.case$ "t"`: lowercase everything except the first character
@@ -133,7 +144,7 @@ local NAME_VARS = { 'author', 'editor', 'translator', 'container-author', 'colle
 
 local function initials(given)
   local out = {}
-  for word in given:gmatch('%S+') do
+  for word in given:gmatch('[^ \t\r\n]+') do  -- not %S: pandoc's locale treats UTF-8 bytes 0x85/0xA0 as space
     local parts = {}
     for part in word:gmatch('[^-]+') do
       parts[#parts + 1] = part:match('^[%z\1-\127\194-\244][\128-\191]*')
@@ -239,9 +250,6 @@ end
 
 -- Chinese text takes no space around a citation ("再生产 [@a] 认为" -> "再生产[@a]认为").
 -- xeCJK drops such spaces in PDF; HTML and Word would keep them, so drop them here.
-local function is_cjk_cp(cp)
-  return cp and ((cp >= 0x3000 and cp <= 0x9FFF) or (cp >= 0xFF00 and cp <= 0xFFEF))
-end
 local function edge_cp(el, last)
   if not el or el.t ~= 'Str' then return nil end
   local cp

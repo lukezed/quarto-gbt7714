@@ -8,3 +8,7 @@ __pycache__/
 example/showcase/*.pdf
 example/showcase/*.docx
 example/word-test/*.docx
+
+# data-cases renders
+example/data-cases/*.html
+example/data-cases/*_files/

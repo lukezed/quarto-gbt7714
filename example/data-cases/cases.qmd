@@ -1,0 +1,8 @@
+---
+title: data cases
+bibliography: [refs.bib, refs.json]
+filters: [gbt7714]
+gbt7714: numeric
+---
+
+[@accent] [@korean] [@zhbert] [@zhcn] [@arxivgs] [@arxiveprint] [@ruedition] [@koedition] [@jsonzh]
