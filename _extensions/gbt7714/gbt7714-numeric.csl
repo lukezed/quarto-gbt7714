@@ -359,17 +359,31 @@
   </macro>
   
   <macro name="secondary-contributors">
-    <names variable="translator">
-      <name delimiter="，" />
-      <et-al term="et-al" /><label form="short" prefix="，" />
-    </names>
+    <group delimiter="，">
+      <names variable="translator">
+        <name delimiter="，" />
+        <et-al term="et-al" />
+      </names>
+      <choose>
+        <if variable="translator">
+          <text variable="gbt-translator-term" />
+        </if>
+      </choose>
+    </group>
   </macro>
   
   <macro name="secondary-contributors-en">
-    <names variable="translator">
-      <name delimiter="，" />
-      <et-al term="and others" /><label form="short" prefix="，" />
-    </names>
+    <group delimiter="，">
+      <names variable="translator">
+        <name delimiter="，" />
+        <et-al term="and others" />
+      </names>
+      <choose>
+        <if variable="translator">
+          <text variable="gbt-translator-term" />
+        </if>
+      </choose>
+    </group>
   </macro>
   
   <macro name="container-contributors">

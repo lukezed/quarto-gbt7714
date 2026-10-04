@@ -26,6 +26,8 @@ python3 test/test_multi_narrative.py # 多条叙述式引文与脚注
 python3 test/test_name_disambiguation.py # 叙述式与括号引文共享消歧结果
 python3 test/test_inferred_year.py # 推定年份与出版年份的独立消歧
 python3 test/test_fragment_entries.py # 丛书卷册与日期片段
+python3 test/test_localization.py # 译者称谓：对照 BST，独立于文档语言
+python3 test/test_language_order.py # 语言分组配置、拼音 key 与编号稳定性
 python3 test/test_bibliography_heading.py # 自动标题与显式文献表标题
 python3 test/test_blind.py --pdf --manuscript # 投稿稿分页与匿名检查
 # 创建并渲染 manuscript 项目后，检查 Word 样式及图注 OOXML：
@@ -57,3 +59,9 @@ sh example/arch-cases/run.sh      # Quarto 集成（标题、交叉引用、marg
 - 日期片段 `[1936]` 的脚注原本正常；修正了对照脚本把日期误删作文献编号的问题。
 
 这些结果覆盖仓库内的标准示例与回归用例，不代表所有文献库和 Quarto 配置都已验证。Quarto book、natbib、Typst 等集成限制见[适用范围与限制](citations.md#适用范围与限制)。
+
+## 中文本地化补充核查
+
+对照 [quarto-chinese 的说明](https://retompi.com/quarto-chinese/) 和其 `localize-cnbib.lua`、`sort-bib.py` 后，补上外文译者误用“译”的遗漏，并提供语言分组配置。上游 BST 的 `bbl.translator` 区分“译”与 `trans.`；`format.editors` 不附加角色称谓；中文拼音依赖 `key`。新增小样本验证了标准示例库未覆盖的外文译者场景。
+
+此次沿用本扩展的数据预处理与 CSL 分支，没有复制对方代码，也没有引入 Python 排序依赖。完整的正文排版工具集不属于引用扩展的覆盖范围。

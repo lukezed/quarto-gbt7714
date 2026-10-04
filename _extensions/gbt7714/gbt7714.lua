@@ -666,8 +666,25 @@ end
 -- bst presort / bib.sort.order: language order, then `key` or names, then year, then cite key.
 -- Hex-encoded so citeproc's collation reproduces bibtex's plain byte order
 -- (CJK without `key` sorts by code point, after any pinyin `key`).
-local LANG_ORDER = { zh = 1, ja = 2, en = 3, ru = 4 }
-local function bst_sort_key(raw, r, lang)
+local function language_order(meta)
+  local defaults = { zh = 1, ja = 2, en = 3, ru = 4, other = 5 }
+  local configured = meta['gbt7714-language-order']
+  if configured == nil then return defaults end
+  if pandoc.utils.type(configured) ~= 'List' or #configured ~= 5 then
+    fatal('gbt7714-language-order must list zh, ja, en, ru and other exactly once')
+  end
+  local order = {}
+  for i, value in ipairs(configured) do
+    local lang = str(value)
+    if not defaults[lang] or order[lang] then
+      fatal('gbt7714-language-order must list zh, ja, en, ru and other exactly once')
+    end
+    order[lang] = i
+  end
+  return order
+end
+
+local function bst_sort_key(raw, r, lang, order)
   -- bst sorts on the year field; biblatex `date`, CSL-JSON/YAML and crossref give only r.issued
   local dp = r.issued and r.issued['date-parts'] and r.issued['date-parts'][1]
   local year = raw.year or (dp and dp[1] and tostring(dp[1])) or ''
@@ -686,7 +703,7 @@ local function bst_sort_key(raw, r, lang)
       who = names(r.author) or anon
     end
   end
-  local s = string.char(64 + (LANG_ORDER[lang] or 5)) .. '    ' .. who .. '    '
+  local s = string.char(64 + (order[lang] or order.other)) .. '    ' .. who .. '    '
     .. sortify(year) .. '    ' .. r.id
   return (s:sub(1, 250):gsub('.', function(c) return string.format('%02x', c:byte()) end))
 end
@@ -706,6 +723,7 @@ function Pandoc(doc)
   if not STYLES[style] then
     fatal('unknown style "' .. style .. '" (use authoryear, numeric or note)')
   end
+  local order = language_order(doc.meta)
   -- Chinese convention: the note mark goes before the punctuation ("研究¹。"); pandoc defaults to after
   if style == 'note' and doc.meta['notes-after-punctuation'] == nil then
     doc.meta['notes-after-punctuation'] = false
@@ -744,7 +762,7 @@ function Pandoc(doc)
       end
     end
     -- before the holder override below: bst sorts patents by inventors, labels them by holder
-    r['gbt-sort'] = bst_sort_key(e, r, elang)
+    r['gbt-sort'] = bst_sort_key(e, r, elang, order)
     r.type = BIBTYPE[e.type] or r.type
     -- fields pandoc drops; bst uses holder (patent assignee) in place of the inventors
     if e.holder then
@@ -802,6 +820,9 @@ function Pandoc(doc)
     if r.type == 'map' and e.booktitle and not r['container-title'] then  -- map in an atlas
       r['container-title'] = fullwidth_str(en and sentence_case_raw(e.booktitle_braced) or e.booktitle)
     end
+    -- bst bbl.translator depends on entry language, not document language
+    -- or the translator's name script. Only Chinese entries use 译.
+    r['gbt-translator-term'] = elang == 'zh' and '译' or 'trans.'
     r.edition = edition(r.edition, elang)
     if r.volume and not PERIODICAL_TYPES[r.type] then  -- bst format.bvolume (books, maps, ...)
       local v = str(r.volume)

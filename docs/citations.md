@@ -38,6 +38,21 @@ gbt7714: authoryear   # authoryear（默认）| numeric | note
   路径相对于写这一行的文件：写在项目根的 `_quarto.yml` 里如上；写在子目录 qmd 的 front matter 里要相应加 `../`。已有自己模板的，在 Word 里把 `Bibliography` 样式设为悬挂缩进即可。模板由 `tools/make_reference_docx.py` 生成。
 - 正文页码写 `[@key, 42]`、`[@key, p. 42]` 或 `[@key, 第42页]`，输出为上标页码（`[1]⁴²`、`（Boobier，2020）⁴²`）。
 
+## 文献语言与排序
+
+译者称谓跟随文献语言：中文为“译”，其他语言为 `trans.`，与上游 BST 一致；文档的 `lang` 不改变这项判断。编者作为主要责任者时不另加“编／ed.”。
+
+著者年份制默认按中文、日文、英文、俄文、其他语言分组。模板可显式调整顺序，例如英文在前：
+
+```yaml
+gbt7714: authoryear
+gbt7714-language-order: [en, zh, ja, ru, other]
+```
+
+配置必须恰好包含这五项，各一次；`other` 包括韩文及其他语言。每组内部继续使用已有排序规则。顺序编码制和脚注体例仍按引用顺序编号，不受此选项影响；自定义 CSL 的排序由该 CSL 决定。
+
+中文姓名不会自动转拼音。需要拼音排序时，在 `.bib` 中写明 `key`，多音姓氏也由这个字段指定，例如 `author = {单明}, key = {shan4 ming2}`。这是上游 BibTeX 样式的用法。
+
 ## 中文 PDF
 
 中文文章可用 `ctexart` 和 XeLaTeX；需安装含 `ctex` 的 TeX Live（或 TinyTeX）和可用的中文字体：
@@ -161,6 +176,10 @@ format:
 pandoc paper.md --bibliography refs.bib -M gbt7714=numeric \
   -L _extensions/gbt7714/gbt7714.lua --citeproc -o paper.docx
 ```
+
+## 中文正文排版的范围
+
+引用扩展负责文献数据、正文引文与文献表；中文引号转换、源码软换行、中西文自动空格、局部字体和段落对齐由写作模板配置。需要这些功能时，可参考 [quarto-chinese](https://github.com/TomBener/quarto-chinese) 的独立 filters；与本扩展组合使用仍需检查执行顺序和实际输出。
 
 ## 数据规范
 
