@@ -53,7 +53,7 @@ gbt7714: authoryear   # authoryear（默认）| numeric | note
 
 ## 工作原理
 
-- `_extensions/gbt7714/gbt7714-*.csl`：最初由 [zotero-chinese/styles](https://github.com/zotero-chinese/styles) 的 2025 双语 CSL-M 样式经 `tools/cslm2csl.py` 转换（仅作出处记录，**不要重跑**），此后 CSL 文件本身就是源码，按 golden test 修正。
+- `_extensions/gbt7714/gbt7714-*.csl`：最初由 [zotero-chinese/styles](https://github.com/zotero-chinese/styles) 的 2025 双语 CSL-M 样式经 `tools/provenance/cslm2csl.py` 转换（仅作出处记录，**不要重跑**），此后 CSL 文件本身就是源码，按 golden test 修正。
 - `gbt7714.lua`：补上 CSL 和 pandoc 做不到的部分，规则都照搬 bst：
   - 语言判断（`set.entry.lang`）、中英文分支、排序 key（`presort`）；
   - 英文标题 sentence case、全角标点、姓名格式（拼音名不缩写等）、版次与卷；
@@ -94,6 +94,4 @@ python3 test/compare.py authoryear   # 或 numeric / cite-authoryear / cite-nume
 
 ## License
 
-- CSL 文件：CC BY-SA 3.0（派生自 zotero-chinese/styles）
-- `test/upstream/`：LPPL 1.3c（zepinglee/gbt7714-bibtex-style）
-- 其余代码：MIT
+见 `LICENSE`：代码 MIT；CSL 文件 CC BY-SA 3.0（派生自 [zotero-chinese/styles](https://github.com/zotero-chinese/styles)，原作者 Zeping Lee）；`test/upstream/` 为 LPPL 1.3c（[zepinglee/gbt7714-bibtex-style](https://github.com/zepinglee/gbt7714-bibtex-style)）。

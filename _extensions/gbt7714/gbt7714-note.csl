@@ -1,19 +1,23 @@
 <?xml version='1.0' encoding='utf-8'?>
 <style xmlns="http://purl.org/net/xbiblio/csl" class="note" version="1.0" demote-non-dropping-particle="never" name-as-sort-order="all" sort-separator=" " page-range-format="expanded" default-locale="zh-CN">
   <info>
-    <title>GB/T 7714—2025（注释，双语）</title>
-    <id>https://zotero-chinese.com/styles/GB-T-7714—2025（注释，双语）</id>
-    <link href="https://zotero-chinese.com/styles/GB-T-7714—2025（注释，双语）" rel="self" />
-    <link href="https://zotero-chinese.com/styles/GB-T-7714—2025（顺序编码，双语）" rel="template" />
+    <title>GB/T 7714—2025（注释，双语，Quarto/pandoc）</title>
+    <id>https://github.com/lukezed/quarto-gbt7714/gbt7714-note</id>
+    <link href="https://github.com/lukezed/quarto-gbt7714/blob/main/_extensions/gbt7714/gbt7714-note.csl" rel="self" />
+    <link href="https://zotero-chinese.com/styles/GB-T-7714—2025（注释，双语）" rel="template" />
     <link href="https://std.samr.gov.cn/gb/search/gbDetailed?id=4507EFE13D37CB6AE06397BE0A0A601F" rel="documentation" />
     <author>
       <name>Zeping Lee</name>
       <email>zepinglee@gmail.com</email>
     </author>
+    <contributor>
+      <name>lukezed</name>
+      <uri>https://github.com/lukezed/quarto-gbt7714</uri>
+    </contributor>
     <category citation-format="note" />
     <category field="generic-base" />
-    <summary>GB/T 7714—2025 信息与文献 参考文献著录规则（2026-07-01实施）</summary>
-    <updated>2026-08-09T15:54:09+08:00</updated>
+    <summary>GB/T 7714—2025 信息与文献 参考文献著录规则（2026-07-01实施）. Modified from the zotero-chinese style: plain CSL 1.0 for pandoc citeproc (no CSL-M), works with gbt7714.lua; changes tracked in the quarto-gbt7714 git history.</summary>
+    <updated>2026-10-04T00:00:00+08:00</updated>
     <rights license="http://creativecommons.org/licenses/by-sa/3.0/">This work is licensed under a Creative Commons Attribution-ShareAlike 3.0 License</rights>
   </info>
   <locale xml:lang="en">
