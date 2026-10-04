@@ -1,0 +1,18 @@
+project:
+  type: book
+book:
+  title: "Book test"
+  chapters:
+    - index.qmd
+    - ch1.qmd
+    - ch2.qmd
+    - references.qmd
+bibliography: refs.bib
+filters: [gbt7714]
+gbt7714: numeric
+format:
+  docx: default
+  pdf:
+    pdf-engine: xelatex
+    CJKmainfont: Songti SC
+  html: default

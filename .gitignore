@@ -12,3 +12,5 @@ example/natbib/*.pdf
 example/natbib/*.tex
 example/typst/*.pdf
 example/typst/*.typ
+example/book/_book/
+example/book/.quarto/
