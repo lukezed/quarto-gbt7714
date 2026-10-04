@@ -8,3 +8,5 @@ __pycache__/
 example/showcase/*.pdf
 example/showcase/*.docx
 example/word-test/*.docx
+example/natbib/*.pdf
+example/natbib/*.tex

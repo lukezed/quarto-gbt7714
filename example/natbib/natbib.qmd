@@ -1,0 +1,12 @@
+---
+title: natbib
+bibliography: refs.bib
+filters: [gbt7714]
+gbt7714: numeric
+format:
+  pdf:
+    cite-method: natbib
+    pdf-engine: xelatex
+    CJKmainfont: Songti SC
+---
+英文 [@knuth1984]，中文 [@zhang2019]，叙述 @wang2015，页码 [@smith2020, 42]。

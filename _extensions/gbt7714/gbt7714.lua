@@ -410,6 +410,8 @@ local function bst_sort_key(raw, r, lang)
 end
 
 function Pandoc(doc)
+  -- natbib/biblatex (cite-method) hand citations to LaTeX: leave the document alone.
+  if PANDOC_WRITER_OPTIONS.cite_method ~= 'citeproc' then return nil end
   local style = pandoc.utils.stringify(doc.meta.gbt7714 or 'authoryear')
   if not STYLES[style] then
     error('gbt7714: unknown style "' .. style .. '" (use authoryear, numeric or note)')
