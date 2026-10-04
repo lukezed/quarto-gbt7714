@@ -1,0 +1,5 @@
+_book/
+*.html
+*_files/
+.quarto/
+__pycache__/

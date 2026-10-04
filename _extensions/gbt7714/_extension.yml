@@ -1,0 +1,7 @@
+title: GB/T 7714
+author: lukezed
+version: 0.1.0
+quarto-required: ">=1.4.0"
+contributes:
+  filters:
+    - gbt7714.lua

@@ -1,0 +1,11 @@
+---
+title: "gbt7714: authoryear"
+lang: zh
+bibliography: refs.bib
+filters: [gbt7714]
+gbt7714: authoryear
+---
+
+英文 [@knuth1984]，多作者 [@smith2020]，中文 [@zhang2019]，叙述式 @wang2015 指出。重复 [@zhang2019]。带页码 [@smith2020, p. 42]。
+
+# 参考文献 {.unnumbered}
