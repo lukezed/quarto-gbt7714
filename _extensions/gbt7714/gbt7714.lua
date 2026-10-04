@@ -171,7 +171,7 @@ local BIBTYPE = {
 -- ponytail: regex scan of .bib files for `@type{key, field = {value}, ...}`; CSL-JSON/YAML bibs
 -- carry correct types already. Ceiling: values must be {braced} (not "quoted" or bare macros).
 -- Returns key -> { type = biblatex type, <field> = raw value } for fields pandoc drops.
-local RAW_FIELDS = { holder = true, scale = true, dimensions = true, cstr = true, eid = true,
+local RAW_FIELDS = { year = true, holder = true, scale = true, dimensions = true, cstr = true, eid = true,
                      archiveprefix = true, eprinttype = true }
 
 local function bib_scan(meta)
@@ -227,6 +227,14 @@ function Pandoc(doc)
       if not (r.url and pandoc.utils.stringify(r.url):find(e.cstr, 1, true)) then r.CSTR = e.cstr end
     end
     if not r.page and e.eid then r.page = e.eid end
+    if r.type == 'periodical' then
+      -- bst `periodical`: no container; volume/year ranges with full-width punctuation and "—"
+      r['container-title'] = nil
+      if r.volume then
+        r.volume = pandoc.utils.stringify(r.volume):gsub(', ', '，'):gsub(' ?%(', '（'):gsub('%) ?', '）'):gsub('%-', '—')
+      end
+      if e.year and e.year:find('-') then r.issued = { literal = e.year:gsub('%-', '—') } end
+    end
     if r.type == 'article' and not r.publisher then r.publisher = e.archiveprefix or e.eprinttype end
     local lang = r.language and pandoc.utils.stringify(r.language):lower() or ''
     local cjk = is_cjk(r)
