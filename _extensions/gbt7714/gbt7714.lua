@@ -30,11 +30,40 @@ local function sentence_case(title)
     traverse = 'topdown',  -- so a Span is seen (and skipped) before its Strs
     Span = function(sp) first = false; return sp, false end,
     Str = function(s)
-      local t = s.text:lower()  -- ASCII only, like bst change.case$
+      local t = s.text:gsub('[A-Z]', string.lower)  -- ASCII only, like bst change.case$; string.lower alone mangles UTF-8
       if first then t = s.text:sub(1, 1) .. t:sub(2); first = false end
       return pandoc.Str(t)
     end,
   })
+end
+
+-- Mirror bst `convert.fullwidth.punctuations` (default CTL_bib_punct = GB, all languages):
+-- ", " ": " "; " -> ，：；  "!" "?" -> ！？  "(" ")" -> （）, dropping the adjacent space.
+local FW_TRAIL = { [','] = '，', [':'] = '：', [';'] = '；' }
+local FW_FIELDS = { 'title', 'container-title', 'collection-title', 'volume-title',
+                    'publisher', 'publisher-place', 'event-title', 'event-place' }
+
+local function fullwidth(x)
+  if x == nil or type(x) == 'string' then return x end
+  return x:walk({ Inlines = function(ils)
+    local out = pandoc.Inlines{}
+    for i, el in ipairs(ils) do
+      local nxt = ils[i + 1]
+      if el.t == 'Str' then
+        local t = el.text:gsub('!', '！'):gsub('%?', '？'):gsub('%(', '（'):gsub('%)', '）')
+        local last = t:sub(-1)
+        if FW_TRAIL[last] and nxt and nxt.t == 'Space' then t = t:sub(1, -2) .. FW_TRAIL[last] end
+        el = pandoc.Str(t)
+      elseif el.t == 'Space' then
+        local prev = out[#out]
+        local after = prev and prev.t == 'Str' and prev.text:match('[，：；！？）]$')
+        local before = nxt and nxt.t == 'Str' and nxt.text:match('^（')
+        if after or before then el = nil end
+      end
+      if el then out:insert(el) end
+    end
+    return out
+  end })
 end
 
 -- biblatex types pandoc maps to an empty or lossy CSL type; the CSL expects these.
@@ -81,6 +110,7 @@ function Pandoc(doc)
       r.language = nil
       r.title = sentence_case(r.title)
     end
+    for _, f in ipairs(FW_FIELDS) do r[f] = fullwidth(r[f]) end
   end
   doc.meta.references = refs
   doc.meta.bibliography = nil
