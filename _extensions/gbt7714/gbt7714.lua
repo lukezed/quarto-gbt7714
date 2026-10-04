@@ -424,9 +424,11 @@ function Pandoc(doc)
     end
     return nil
   end
-  local style = pandoc.utils.stringify(doc.meta.gbt7714 or 'authoryear')
+  local style = pandoc.utils.stringify(doc.meta.gbt7714 or 'authoryear'):lower()
   if not STYLES[style] then
-    error('gbt7714: unknown style "' .. style .. '" (use authoryear, numeric or note)')
+    -- Quarto turns error() into a log line and keeps rendering, so stop explicitly.
+    io.stderr:write('ERROR: gbt7714: unknown style "', style, '" (use authoryear, numeric or note)\n')
+    os.exit(1)
   end
   -- Chinese convention: the note mark goes before the punctuation ("研究¹。"); pandoc defaults to after
   if style == 'note' and doc.meta['notes-after-punctuation'] == nil then
