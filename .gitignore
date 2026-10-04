@@ -3,3 +3,7 @@ _book/
 *_files/
 .quarto/
 __pycache__/
+
+# rendered showcase outputs
+example/showcase/*.pdf
+example/showcase/*.docx

@@ -1,0 +1,14 @@
+---
+title: "GB/T 7714 示例：note"
+bibliography: refs.bib
+filters: [gbt7714]
+gbt7714: note
+format:
+  html: default
+  docx: default
+  pdf:
+    pdf-engine: xelatex
+    CJKmainfont: Songti SC
+---
+
+{{< include _body.qmd >}}
