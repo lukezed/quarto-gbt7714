@@ -256,6 +256,14 @@ function Pandoc(doc)
       end
       if e.year and e.year:find('-') then r.issued = { literal = e.year:gsub('%-', '—') } end
     end
+    -- bst article.journal: without volume/number the journal is followed by the date only
+    -- when it is a full date. Passed as event-date: pandoc's metadata reader does not parse
+    -- available-date as a date, and event-date is otherwise unused on journal articles.
+    local dp = r.issued and r.issued['date-parts'] and r.issued['date-parts'][1]
+    if (r.type == 'article-journal' or r.type == 'article-magazine') and not r.volume and not r.issue
+      and not r['event-date'] and dp and #dp == 3 then
+      r['event-date'] = { ['date-parts'] = { { dp[1], dp[2], dp[3] } } }
+    end
     if r.type == 'article' and not r.publisher then r.publisher = e.archiveprefix or e.eprinttype end
     local lang = r.language and pandoc.utils.stringify(r.language):lower() or ''
     local cjk = is_cjk(r)

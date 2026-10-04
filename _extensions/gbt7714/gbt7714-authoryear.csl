@@ -637,14 +637,8 @@
               <choose>
                 <if variable="volume issue" match="none">
                   
-                  <choose>
-                    <if variable="available-date">
-                      <date variable="available-date" form="numeric" />
-                    </if>
-                    <else>
-                      <date variable="issued" form="numeric" />
-                    </else>
-                  </choose>
+                  <!-- bst: full date only (set as event-date by gbt7714.lua); year is after the author -->
+                  <date variable="event-date" form="numeric" />
                 </if>
               </choose>
               <text variable="volume" />
@@ -684,14 +678,8 @@
               <choose>
                 <if variable="volume issue" match="none">
                   
-                  <choose>
-                    <if variable="available-date">
-                      <date variable="available-date" form="numeric" />
-                    </if>
-                    <else>
-                      <date variable="issued" form="numeric" />
-                    </else>
-                  </choose>
+                  <!-- bst: full date only (set as event-date by gbt7714.lua); year is after the author -->
+                  <date variable="event-date" form="numeric" />
                 </if>
               </choose>
               <text variable="volume" />
