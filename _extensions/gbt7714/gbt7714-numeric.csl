@@ -766,7 +766,7 @@
           <text variable="volume" /> 
           <text macro="publisher" />
         </else-if>
-        <else-if type="paper-conference">
+        <else-if type="paper-conference" variable="event-title" match="all">
           
           <group delimiter="//">
             <group delimiter=". ">
@@ -863,7 +863,7 @@
           <text variable="volume" /> 
           <text macro="publisher-en" />
         </else-if>
-        <else-if type="paper-conference">
+        <else-if type="paper-conference" variable="event-title" match="all">
           
           <group delimiter="//">
             <group delimiter=". ">
