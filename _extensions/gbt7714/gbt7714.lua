@@ -373,6 +373,10 @@ function Pandoc(doc)
   if not STYLES[style] then
     error('gbt7714: unknown style "' .. style .. '" (use authoryear, numeric or note)')
   end
+  -- Chinese convention: the note mark goes before the punctuation ("研究¹。"); pandoc defaults to after
+  if style == 'note' and doc.meta['notes-after-punctuation'] == nil then
+    doc.meta['notes-after-punctuation'] = false
+  end
   if doc.meta.csl == nil then
     doc.meta.csl = pandoc.path.join({ dir, 'gbt7714-' .. style .. '.csl' })
   end

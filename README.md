@@ -18,6 +18,7 @@ gbt7714: authoryear   # authoryear（默认）| numeric | note
 
 - 不需要设置 `lang`：中文条目的"等""佚名"等不依赖文档语言。
 - 中文条目要按拼音排序，需在 bib 中提供 `key` 字段（如 `key = {wang2 ming2}`），与 upstream bst 相同；没有 `key` 的中文条目按码位排在其后。
+- 注释体例（`note`）：重复引用写"同N"（指向第 N 条注释）；注码放在标点前（"研究¹。"），可用 `notes-after-punctuation: true` 改回；文末同时输出参考文献表，不需要时设 `suppress-bibliography: true`。
 - 正文页码写 `[@key, 42]` 或 `[@key, p. 42]`，输出为上标页码（`[1]⁴²`、`（Boobier，2020）⁴²`）。
 
 ## 工作原理
@@ -52,7 +53,6 @@ python3 test/compare.py authoryear   # 或 numeric / cite-authoryear / cite-nume
 - [ ] authoryear 消歧后缀：bst 把"[2025]"（无出版年）与"2025"分开计，citeproc 合并计（4 条）
 - [ ] 丛书名 + 卷 + 书名的片段示例 `中国科学技术史：第二卷 科学思想史`（1 条）
 - [ ] 同姓不同名作者的正文引文消歧（filter 自拼的作者名）
-- [ ] 注释体例待定：重复引用"同N"（upstream）还是"同上"；是否输出文末文献表；`notes-after-punctuation` 默认值。用例见 `example/note-cases.qmd`
 
 ## License
 
