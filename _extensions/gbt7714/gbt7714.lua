@@ -85,24 +85,25 @@ local function fullwidth(x)
   end })
 end
 
--- Mirror bst `format.edition`: ordinal words -> numbers, 1st edition omitted,
--- then "3 版" / "5th ed." / "5 изд."; other text (修订版, 新1版) is kept.
+-- Mirror bst `format.edition`: ordinal words -> numbers, 1st edition omitted; CJK (zh/ja/ko)
+-- get no ordinal suffix; bbl.edition is 版 for zh/ja, изд. for ru, ed. otherwise:
+-- "3 版", "5th ed.", "2 ed." (ko), "3rd изд." (ru, as upstream). Other text (修订版, 新1版) is kept.
 local WORDNUM = { first = 1, second = 2, third = 3, fourth = 4, fifth = 5,
                   sixth = 6, seventh = 7, eighth = 8, ninth = 9, tenth = 10 }
 local REVISED = { ['revised edition'] = 'Rev. ed.', ['revised ed.'] = 'Rev. ed.',
                   revised = 'Rev. ed.', ['rev.'] = 'Rev. ed.', ['修订'] = '修订版' }
 
-local function edition(e, cjk, lang)
+local function edition(e, elang)
   if e == nil then return nil end
   local s = pandoc.utils.stringify(e)
   local n = s:match('^(%d+)') or WORDNUM[s:lower()]
   if not n then return REVISED[s:lower()] or s end
   n = tostring(n)
   if n == '1' then return nil end
-  if cjk then return n .. ' 版' end
-  if lang:match('^ru') then return n .. ' изд.' end
+  local term = (elang == 'zh' or elang == 'ja') and '版' or elang == 'ru' and 'изд.' or 'ed.'
+  if elang == 'zh' or elang == 'ja' or elang == 'ko' then return n .. ' ' .. term end
   local suf = (n:sub(-2, -2) == '1' and 'th') or ({ ['1'] = 'st', ['2'] = 'nd', ['3'] = 'rd' })[n:sub(-1)] or 'th'
-  return n .. suf .. ' ed.'
+  return n .. suf .. ' ' .. term
 end
 
 -- Mirror bst `format.name`: names are pre-formatted here and the CSL prints given as-is
@@ -351,11 +352,17 @@ local LANGID = {
   english = 'en', american = 'en', british = 'en', chinese = 'zh',
   japanese = 'ja', korean = 'ko', russian = 'ru',
 }
+-- Beyond bst (which maps zh-CN etc. to "other"): BCP 47 codes as Zotero and CSL-JSON write them.
+local function lang_of(id)
+  id = id:lower()
+  return LANGID[id] or ({ zh = 'zh', ja = 'ja', ko = 'ko', en = 'en', ru = 'ru' })[id:match('^(%a%a)[-_]') or id] or 'other'
+end
 
 -- bst set.entry.lang: langid/language field, else detect from the first non-empty field.
+-- pandoc's `language` covers CSL-JSON/YAML entries, which have no raw bib fields.
 local function entry_lang(raw, r)
-  local id = raw.langid or raw.language
-  if id and id ~= '' then return LANGID[id:lower()] or 'other' end
+  local id = raw.langid or raw.language or (r.language and str(r.language))
+  if id and id ~= '' then return lang_of(id) end
   local text = ''
   for _, v in ipairs({
     raw.title or str(r.title), raw.author or '', raw.journal or '', raw.journaltitle or '',
@@ -482,16 +489,15 @@ function Pandoc(doc)
       r['event-date'] = { ['date-parts'] = { { dp[1], dp[2], dp[3] } } }
     end
     if r.type == 'article' and not r.publisher then r.publisher = e.archiveprefix or e.eprinttype end
-    local lang = r.language and pandoc.utils.stringify(r.language):lower() or ''
     local en = elang == 'en'
     if r.type == 'map' and e.booktitle and not r['container-title'] then  -- map in an atlas
       r['container-title'] = fullwidth_str(en and sentence_case_raw(e.booktitle_braced) or e.booktitle)
     end
-    r.edition = edition(r.edition, cjk, lang)
+    r.edition = edition(r.edition, elang)
     if r.volume and not PERIODICAL_TYPES[r.type] then  -- bst format.bvolume (books, maps, ...)
       local v = pandoc.utils.stringify(r.volume)
       if v:match('^%d+$') then
-        r.volume = (lang:match('^ko') or lang == 'korean') and ('제 ' .. v .. ' 권')
+        r.volume = elang == 'ko' and ('제 ' .. v .. ' 권')
           or cjk and ('第 ' .. v .. ' 卷') or ('v.' .. v)
       end
     end
