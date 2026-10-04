@@ -1,0 +1,9 @@
+---
+title: "Word 测试：authoryear"
+bibliography: refs.bib
+filters: [gbt7714]
+gbt7714: authoryear
+format: docx
+---
+
+{{< include _body.qmd >}}

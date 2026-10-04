@@ -220,6 +220,7 @@ local function page_locator(suffix)
   local s = pandoc.utils.stringify(suffix or {}):gsub('\194\160', ' ')  -- pandoc puts nbsp after "pp."
   s = s:gsub('^%s*,?%s*', ''):gsub('%s*$', '')
   s = s:gsub('^[Pp]+%.%s*', ''):gsub('^pages?%s+', '')
+  s = s:gsub('^页%s*', ''):gsub('^第%s*(.-)%s*页$', '%1'):gsub('%s*页$', '')  -- 页 50 / 第50页 / 50页
   return s:gsub('–', '-'):match('^%d[%d%-, ]*$')
 end
 

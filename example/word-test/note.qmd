@@ -1,0 +1,9 @@
+---
+title: "Word 测试：note"
+bibliography: refs.bib
+filters: [gbt7714]
+gbt7714: note
+format: docx
+---
+
+{{< include _body.qmd >}}

@@ -19,7 +19,16 @@ gbt7714: authoryear   # authoryear（默认）| numeric | note
 - 不需要设置 `lang`：中文条目的"等""佚名"等不依赖文档语言。
 - 中文条目要按拼音排序，需在 bib 中提供 `key` 字段（如 `key = {wang2 ming2}`），与 upstream bst 相同；没有 `key` 的中文条目按码位排在其后。
 - 注释体例（`note`）：重复引用写"同N"（指向第 N 条注释）；注码放在标点前（"研究¹。"），可用 `notes-after-punctuation: true` 改回；文末同时输出参考文献表，不需要时设 `suppress-bibliography: true`。
-- 正文页码写 `[@key, 42]` 或 `[@key, p. 42]`，输出为上标页码（`[1]⁴²`、`（Boobier，2020）⁴²`）。
+- Word：pandoc 生成 docx 时不读 CSL 的悬挂缩进，文献表格式取决于 reference doc 的 `Bibliography` 样式。可直接用附带的模板（悬挂缩进 2 字，宋体 + Times New Roman）：
+
+  ```yaml
+  format:
+    docx:
+      reference-doc: _extensions/gbt7714/gbt7714-reference.docx
+  ```
+
+  已有自己模板的，在 Word 里把 `Bibliography` 样式设为悬挂缩进即可。模板由 `tools/make_reference_docx.py` 生成。
+- 正文页码写 `[@key, 42]`、`[@key, p. 42]` 或 `[@key, 第42页]`，输出为上标页码（`[1]⁴²`、`（Boobier，2020）⁴²`）。
 
 ## 工作原理
 

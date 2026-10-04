@@ -1,0 +1,9 @@
+---
+title: "Word 测试：numeric"
+bibliography: refs.bib
+filters: [gbt7714]
+gbt7714: numeric
+format: docx
+---
+
+{{< include _body.qmd >}}
