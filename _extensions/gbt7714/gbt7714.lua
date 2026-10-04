@@ -43,12 +43,16 @@ end
 -- ", " ": " "; " -> ，：；  "!" "?" -> ！？  "(" ")" -> （）, dropping the adjacent space.
 local FW_TRAIL = { [','] = '，', [':'] = '：', [';'] = '；' }
 
+-- Two forms of one rule: fullwidth_str for plain strings (literal names, volumes, raw bib
+-- values), fullwidth (below) for pandoc Inlines, where spaces are separate elements.
 local function fullwidth_str(s)
   return (s:gsub(', ', '，'):gsub(': ', '：'):gsub('; ', '；'):gsub('!', '！'):gsub('%?', '？')
     :gsub(' ?%(', '（'):gsub('%) ?', '）'))
 end
 
 -- bst change.case$ "t" on a raw bib string: lowercase ASCII outside {braces}, keep the first char.
+-- Kept apart from sentence_case: it serves raw values pandoc never parsed (an atlas booktitle on
+-- @map), where only the raw braces still mark protected text.
 local function sentence_case_raw(s)
   local depth, out = 0, {}
   for i = 1, #s do
