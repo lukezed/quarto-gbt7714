@@ -63,7 +63,7 @@ local function fullwidth(x)
       elseif el.t == 'Space' then
         local prev = out[#out]
         local after = prev and prev.t == 'Str' and prev.text:match('[，：；！？）]$')
-        local before = nxt and nxt.t == 'Str' and nxt.text:match('^（')
+        local before = nxt and nxt.t == 'Str' and nxt.text:match('^%(')
         if after or before then el = nil end
       end
       if el then out:insert(el) end
@@ -155,6 +155,10 @@ local function format_name(n)
   return n
 end
 
+-- container-title holds the bst `booktitle` for these types (sentence-cased like title).
+local BOOKTITLE_TYPES = { chapter = true, ['paper-conference'] = true,
+                          ['entry-dictionary'] = true, ['entry-encyclopedia'] = true }
+
 -- biblatex types pandoc maps to an empty or lossy CSL type; the CSL expects these.
 local BIBTYPE = {
   archive = 'collection', map = 'map', preprint = 'article', standard = 'standard',
@@ -200,7 +204,15 @@ function Pandoc(doc)
       r.language = 'zh'
     else
       r.language = nil
-      r.title = sentence_case(r.title)
+      -- bst change.sentence.case: English entries only; periodical titles kept
+      local en = lang == '' or lang:match('^en') or lang == 'english' or lang == 'american' or lang == 'british'
+      if en and r.type ~= 'periodical' then r.title = sentence_case(r.title) end
+      if en and BOOKTITLE_TYPES[r.type] then r['container-title'] = sentence_case(r['container-title']) end
+    end
+    r['event-title'] = r['event-title'] or r.event
+    -- bst format.doi: no DOI when the URL already contains it
+    if r.doi and r.url and pandoc.utils.stringify(r.url):find(pandoc.utils.stringify(r.doi), 1, true) then
+      r.doi = nil
     end
     for _, f in ipairs(FW_FIELDS) do r[f] = fullwidth(r[f]) end
     for _, v in ipairs(NAME_VARS) do
