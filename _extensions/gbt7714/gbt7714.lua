@@ -191,7 +191,7 @@ local RAW_FIELDS = { year = true, booktitle = true, holder = true, scale = true,
                      -- bst sort key and set.entry.lang
                      key = true, organization = true, langid = true, language = true, title = true, author = true,
                      journal = true, journaltitle = true, address = true, location = true, publisher = true,
-                     series = true }
+                     series = true, eprint = true, url = true }
 
 local function bib_scan(meta)
   local entries, bibs = {}, meta.bibliography
@@ -488,7 +488,30 @@ function Pandoc(doc)
       and not r['event-date'] and dp and #dp == 3 then
       r['event-date'] = { ['date-parts'] = { { dp[1], dp[2], dp[3] } } }
     end
-    if r.type == 'article' and not r.publisher then r.publisher = e.archiveprefix or e.eprinttype end
+    -- bst article: a journal starting with "arXiv" (check.arxiv.preprint), or no journal but an
+    -- eprint, makes the entry a preprint [PP]; the arXiv id after "arXiv:" becomes the URL.
+    if e.type == 'article' then
+      local j = e.journal or e.journaltitle
+      if j and j:lower():sub(1, 5) == 'arxiv' then
+        r.type, r['container-title'] = 'article', nil
+        local _, at = j:lower():find('.*arxiv:')  -- last "arXiv:", as bst scans back from the end
+        local id = at and j:sub(at + 1):match('^[^ %[]+')
+        if id then r.url = 'https://arxiv.org/abs/' .. id end
+      elseif not j and (e.eprint or e.archiveprefix or e.eprinttype) then
+        r.type = 'article'
+      end
+    end
+    if r.type == 'article' then
+      -- bst format.eprint: source name; it never builds a URL from eprint (entry.eprint is unset),
+      -- so drop the one pandoc derives from it
+      local src = e.archiveprefix or e.eprinttype
+      src = ({ arxiv = 'arXiv', pubmed = 'PubMed' })[src] or src
+      if not src and (e.journal or e.journaltitle or ''):lower():sub(1, 5) == 'arxiv' then src = 'arXiv' end
+      r.publisher = r.publisher or src
+      if e.eprint and not e.url and r.url and pandoc.utils.stringify(r.url):find(e.eprint, 1, true) then
+        r.url = nil
+      end
+    end
     local en = elang == 'en'
     if r.type == 'map' and e.booktitle and not r['container-title'] then  -- map in an atlas
       r['container-title'] = fullwidth_str(en and sentence_case_raw(e.booktitle_braced) or e.booktitle)
