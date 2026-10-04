@@ -6,6 +6,10 @@ Prints the share of identical entries, whether the sort order matches, and (-v) 
 Citation mode: python3 test/compare.py cite-authoryear|cite-numeric [-v]
 Compiles CITES with gbt7714.sty + bst (xelatex) and pandoc, compares each line.
 Superscripts are marked as ^(...) on both sides.
+
+Regression guard: --check fails (exit 1) if an entry/citation identical in test/baseline.json
+is no longer identical; --update rewrites the baseline from the current results.
+Pandoc runs with the user's default settings (no `lang`), as README promises.
 """
 import html, json, os, re, shutil, subprocess, sys, tempfile
 
@@ -24,7 +28,8 @@ def bst(style):
     with tempfile.TemporaryDirectory() as d:
         open(os.path.join(d, 'a.aux'), 'w').write(
             f'\\citation{{*}}\n\\bibstyle{{{os.path.join(UP, "gbt7714-" + style)}}}\n\\bibdata{{{BIB[:-4]}}}\n')
-        subprocess.run(['bibtex', 'a'], cwd=d, capture_output=True)
+        r = subprocess.run(['bibtex', 'a'], cwd=d, capture_output=True, text=True)
+        if not os.path.exists(os.path.join(d, 'a.bbl')): sys.exit('bibtex failed:\n' + r.stdout)
         bbl = open(os.path.join(d, 'a.bbl'), encoding='utf-8').read()
     out = []
     for item in bbl.split('\\bibitem')[1:]:
@@ -53,7 +58,7 @@ def bst(style):
 def csl(style):
     md = '---\nnocite: "@*"\n---\n'
     r = subprocess.run(['pandoc', '-f', 'markdown', '-t', 'html', '--wrap=none',
-                        '-M', f'bibliography={BIB}', '-M', f'gbt7714={style}', '-M', 'lang=zh-u-co-pinyin',
+                        '-M', f'bibliography={BIB}', '-M', f'gbt7714={style}',
                         '-L', os.path.join(EXT, 'gbt7714.lua'), '--citeproc'],
                        input=md, capture_output=True, text=True)
     if r.returncode: sys.exit(r.stderr)
@@ -68,6 +73,7 @@ def csl(style):
 A, B, C = 'gbt7714.5.1:3', 'gbt7714.7.7:5', 'gbt7714.9.3.1.2:1'  # en: 1, 2, 3 authors
 D, E, F = 'gbt7714.5.1:1', 'gbt7714.b.4:7', 'gbt7714.b.4:11'     # zh: 1, 2, 3 authors
 G1, G2 = 'gbt7714.8.5.3:4', 'gbt7714.8.5.3:5'                    # same authors, same year
+N = 'gbt7714.8.11.2.2:1'                                         # no author (佚名)
 CITES = [
     (rf'\citep{{{A}}}', f'[@{A}]'),
     (rf'\citet{{{A}}}', f'@{A}'),
@@ -85,6 +91,13 @@ CITES = [
     (rf'\citep{{{G1},{G2}}}', f'[@{G1}; @{G2}]'),
     (rf'\citep{{{A},{D}}}', f'[@{A}; @{D}]'),
     (rf'\citep{{{A},{B},{C}}}', f'[@{A}; @{B}; @{C}]'),
+    (rf'\citep[5]{{{A}}}\citep[7]{{{D}}}', f'[@{A}, 5; @{D}, 7]'),   # each with its own page
+    (rf'\citep{{{F},{A},{D}}}', f'[@{F}; @{A}; @{D}]'),               # upstream keeps written order
+    (rf'\citet{{{N}}}', f'@{N}'),                                     # narrative, no author
+    (rf'\citep{{{N}}}', f'[@{N}]'),
+    (rf'\citep[见][]{{{D}}}', f'[见 @{D}]'),                           # prefix
+    (rf'\citep[第2章]{{{D}}}', f'[@{D}, 第2章]'),                       # non-page locator
+    (rf'\citep{{{A},{B},{F}}}', f'[@{A}; @{B}; @{F}]'),               # numeric compression
 ]
 
 def cite_bst(style):
@@ -100,6 +113,7 @@ def cite_bst(style):
         for cmd in (['xelatex', '-interaction=batchmode', 'a'], ['bibtex', 'a'],
                     ['xelatex', '-interaction=batchmode', 'a'], ['xelatex', '-interaction=batchmode', 'a']):
             subprocess.run(cmd, cwd=d, capture_output=True)
+        if not os.path.exists(os.path.join(d, 'a.pdf')): sys.exit('xelatex failed, see a.log')
         bbox = subprocess.run(['pdftotext', '-bbox', 'a.pdf', '-'], cwd=d, capture_output=True, text=True).stdout
     # Rebuild lines from word boxes: plain pdftotext splits a superscript that overlaps "）".
     words = sorted((float(y), float(x), html.unescape(w)) for x, y, w in re.findall(
@@ -124,7 +138,12 @@ def cite_csl(style):
     return dict(re.findall(r'^(T\d+):\s*(.*)$', h, re.M))
 
 def cite_main(style, verbose):
+    keys = set(re.findall(r'^@\w+\{([^,]+),', open(BIB, encoding='utf-8').read(), re.M))
+    for tex, _ in CITES:
+        for k in re.findall(r'\{([^{}]*)\}$', tex)[0].split(','):
+            assert k in keys, f'citation key {k} no longer in upstream examples'
     b, c = cite_bst(style), cite_csl(style)
+    if len(b) < len(CITES): sys.exit(f'only {len(b)}/{len(CITES)} bst lines found; LaTeX side broken?')
     sup = lambda v: norm(v.replace(')^(', ''))  # merge adjacent superscript runs
     b = {k: sup(v) for k, v in b.items()}
     c = {k: sup(v) for k, v in c.items()}
@@ -135,11 +154,9 @@ def cite_main(style, verbose):
             k = f'T{i}'
             if c.get(k) != b.get(k):
                 print(f'\n{k} {m}\n  bst: {b.get(k)}\n  csl: {c.get(k)}')
+    return same
 
-def main():
-    if sys.argv[1].startswith('cite-'):
-        return cite_main(sys.argv[1][5:], '-v' in sys.argv)
-    style, verbose = sys.argv[1], '-v' in sys.argv
+def entries_main(style, verbose):
     b, c = bst(style), csl(style)
     if style == 'numeric':  # bst numbers by citation order; strip labels, compare text
         c = [(k, re.sub(r'^\[\d+\]\s*', '', v)) for k, v in c]
@@ -151,6 +168,28 @@ def main():
         for k in bd:
             if cd.get(k) != bd[k]:
                 print(f'\n{k}\n  bst: {bd[k]}\n  csl: {cd.get(k)}')
+    return same
+
+BASELINE = os.path.join(HERE, 'baseline.json')
+MODES = ['authoryear', 'numeric', 'cite-authoryear', 'cite-numeric']
+
+def main():
+    args = [a for a in sys.argv[1:] if not a.startswith('-')]
+    verbose = '-v' in sys.argv
+    modes = args or MODES
+    results = {m: (cite_main(m[5:], verbose) if m.startswith('cite-') else entries_main(m, verbose))
+               for m in modes}
+    base = json.load(open(BASELINE)) if os.path.exists(BASELINE) else {}
+    if '--update' in sys.argv:
+        base.update({m: sorted(v) for m, v in results.items()})
+        json.dump(base, open(BASELINE, 'w'), indent=1, ensure_ascii=False)
+        print('baseline updated')
+    elif '--check' in sys.argv:
+        bad = {m: sorted(set(base.get(m, [])) - set(v)) for m, v in results.items()}
+        bad = {m: v for m, v in bad.items() if v}
+        for m, v in bad.items(): print(f'REGRESSION {m}: {v}')
+        if bad: sys.exit(1)
+        print('no regressions against baseline')
 
 if __name__ == '__main__':
     main()
