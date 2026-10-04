@@ -461,8 +461,8 @@
             <text variable="issue" prefix="（" suffix="）" />
           </group>
           <choose>
-            <if locator="page">
-              <text variable="locator" />
+            <if variable="locator">
+              <text macro="locator" />
             </if>
             <else-if variable="page">
               <text variable="page" />
@@ -514,8 +514,8 @@
             <text variable="issue" prefix="（" suffix="）" />
           </group>
           <choose>
-            <if locator="page">
-              <text variable="locator" />
+            <if variable="locator">
+              <text macro="locator-en" />
             </if>
             <else-if variable="page">
               <text variable="page" />
@@ -692,7 +692,7 @@
   
   <macro name="locator">
     <choose>
-      <if locator="page">
+      <if locator="page" variable="locator" match="all">
         <text variable="locator" />
       </if>
       <else-if variable="locator">
@@ -709,7 +709,7 @@
   
   <macro name="locator-en">
     <choose>
-      <if locator="page">
+      <if locator="page" variable="locator" match="all">
         <text variable="locator" />
       </if>
       <else-if variable="locator">

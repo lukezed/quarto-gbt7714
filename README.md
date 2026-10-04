@@ -63,10 +63,14 @@ gbt7714: authoryear   # authoryear（默认）| numeric | note
 ## Golden test
 
 ```bash
-python3 test/compare.py authoryear   # 或 numeric / cite-authoryear / cite-numeric；加 -v 显示逐条差异
+python3 test/compare.py            # 全部模式；也可指定 authoryear / numeric / note / note-cite / cite-authoryear / cite-numeric
+python3 test/compare.py numeric -v # 显示逐条差异
+python3 test/compare.py --check    # 与 test/baseline.json 比，任何原本一致的条目或排序退步即 exit 1
+python3 test/compare.py --update   # 确认是真修好后，重写 baseline
+python3 test/test_bib_scan.py      # bib 原文扫描的边界情况
 ```
 
-用 upstream bst（`test/upstream/`）与本 CSL 分别渲染 GB/T 7714—2025 标准原文的 344 条示例（`gbt7714-examples.bib`），逐条比对。upstream 更新时，替换 `test/upstream/` 后重跑。
+用 upstream bst（`test/upstream/`）与本 CSL 分别渲染 GB/T 7714—2025 标准原文的 344 条示例（`gbt7714-examples.bib`），逐条比对。pandoc 侧用 Quarto 自带的 pandoc、用户默认设置（不设 `lang`）。注释体例 upstream 没有，`note`（文献表）与 `note-cite`（每条文献的首次引用脚注）对照 bst numeric 文献表。upstream 更新时，替换 `test/upstream/` 后跑 `--check`。
 
 当前（严格比对）：
 
@@ -74,14 +78,26 @@ python3 test/compare.py authoryear   # 或 numeric / cite-authoryear / cite-nume
 |---|---|
 | 文献表 numeric | 343/344 |
 | 文献表 authoryear | 339/344 |
-| 正文引文 numeric（`cite-numeric`） | 14/16 |
-| 正文引文 authoryear（`cite-authoryear`） | 16/16 |
+| 注释体例文献表（`note`） | 343/344 |
+| 注释体例首次引用（`note-cite`） | 342/344 |
+| 正文引文 numeric（`cite-numeric`） | 23/23 |
+| 正文引文 authoryear（`cite-authoryear`） | 22/23 |
+
+## 纯 pandoc 用法
+
+filter 自己调用 citeproc，不要再加 `--citeproc`（否则 pandoc 会先用默认样式跑一遍）：
+
+```bash
+pandoc paper.md --bibliography refs.bib -M gbt7714=numeric -L _extensions/gbt7714/gbt7714.lua -o paper.docx
+```
 
 ## 已知差异（TODO）
 
-- [ ] numeric 连续编号：pandoc citeproc 输出 `[7,8]`、`[1–3]`，upstream 是 `[7-8]`、`[1-3]`（需在 citeproc 之后加 post filter）
+- [x] numeric 连续编号压缩为 `[7-8]`、`[1-2,5]`（filter 在 citeproc 之后处理）
+- [ ] authoryear 中文前缀后多一个空格：`（见 博伯尔，2023）`，upstream 为 `（见博伯尔，2023）`
 - [ ] authoryear 消歧后缀：bst 把"[2025]"（无出版年）与"2025"分开计，citeproc 合并计（4 条）
 - [ ] 丛书名 + 卷 + 书名的片段示例 `中国科学技术史：第二卷 科学思想史`（1 条）
+- [ ] 注释体例：只有日期的片段示例 `[1936]` 首次引用脚注为空（1 条）
 - [ ] 同姓不同名作者的正文引文消歧（filter 自拼的作者名）
 
 ## 数据规范

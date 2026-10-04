@@ -1,15 +1,22 @@
 """Golden test: upstream gbt7714 bst (bibtex) vs our CSL (pandoc citeproc), entry by entry.
 
-Usage: python3 test/compare.py authoryear|numeric [-v]
+Usage: python3 test/compare.py [mode ...] [-v] [--check | --update]   (no mode: all modes)
 Prints the share of identical entries, whether the sort order matches, and (-v) each diff.
+
+Note mode: python3 test/compare.py note | note-cite
+No upstream note style exists; the GB/T 7714 note entry is the numeric entry, so the note
+bibliography ("note") and each first-citation footnote ("note-cite") are compared with the
+bst numeric bibliography, labels stripped.
 
 Citation mode: python3 test/compare.py cite-authoryear|cite-numeric [-v]
 Compiles CITES with gbt7714.sty + bst (xelatex) and pandoc, compares each line.
 Superscripts are marked as ^(...) on both sides.
 
 Regression guard: --check fails (exit 1) if an entry/citation identical in test/baseline.json
-is no longer identical; --update rewrites the baseline from the current results.
-Pandoc runs with the user's default settings (no `lang`), as README promises.
+is no longer identical, or if the bibliography order was identical and no longer is;
+--update rewrites the baseline from the current results.
+Pandoc runs with the user's default settings (no `lang`, no `--citeproc`: the filter runs
+citeproc itself), as README promises, using Quarto's bundled pandoc when available.
 """
 import html, json, os, re, shutil, subprocess, sys, tempfile
 
@@ -19,10 +26,22 @@ EXT = os.path.join(HERE, '..', '_extensions', 'gbt7714')
 BIB = os.path.join(UP, 'gbt7714-examples.bib')
 CJK = r'[\u3000-\u9fff\uff00-\uffef]'
 
-def norm(s):
+# Quarto's bundled pandoc is what users run; fall back to a system pandoc.
+PANDOC = ['quarto', 'pandoc'] if shutil.which('quarto') else ['pandoc']
+
+def pandoc(md, *meta):
+    args = [a for m in meta for a in ('-M', m)]
+    r = subprocess.run(PANDOC + ['-f', 'markdown', '-t', 'html', '--wrap=none', '-M', f'bibliography={BIB}',
+                                 *args, '-L', os.path.join(EXT, 'gbt7714.lua')],
+                       input=md, capture_output=True, text=True)
+    if r.returncode: sys.exit(r.stderr)
+    return r.stdout
+
+def norm(s, bst_side=False):
     s = s.replace('\u2019', "'").replace('\u2013', '--')  # typography only, not a style difference
     s = re.sub(r'[ \t\r\n]+', ' ', s).strip()  # not \s: keep em/thin spaces significant
-    return re.sub(rf'(?<={CJK}) (?={CJK})', '', s)
+    # bbl line wrapping leaves spaces between CJK characters; on our side such a space is a bug
+    return re.sub(rf'(?<={CJK}) (?={CJK})', '', s) if bst_side else s
 
 def bst(style):
     with tempfile.TemporaryDirectory() as d:
@@ -52,22 +71,19 @@ def bst(style):
                 .replace('\\,', '\u2009').replace('``', '\u201c').replace("''", '\u201d'))
         body = body.replace('\\&', '&').replace('\\_', '_').replace('\\%', '%').replace('\\$', '$').replace('~', ' ')
         body = re.sub(r'\\[a-zA-Z]+\s*', '', body).replace('{', '').replace('}', '')
-        out.append((key, norm(body)))
+        out.append((key, norm(body, bst_side=True)))
+    return out
+
+def entries_html(h):
+    out = []
+    for chunk in h.split('<div id="ref-')[1:]:
+        key, body = chunk.split('"', 1)
+        body = body.split('>', 1)[1].split('<section id="footnotes"')[0]
+        out.append((html.unescape(key), norm(html.unescape(re.sub(r'<[^>]+>', '', body)))))
     return out
 
 def csl(style):
-    md = '---\nnocite: "@*"\n---\n'
-    r = subprocess.run(['pandoc', '-f', 'markdown', '-t', 'html', '--wrap=none',
-                        '-M', f'bibliography={BIB}', '-M', f'gbt7714={style}',
-                        '-L', os.path.join(EXT, 'gbt7714.lua'), '--citeproc'],
-                       input=md, capture_output=True, text=True)
-    if r.returncode: sys.exit(r.stderr)
-    out = []
-    for chunk in r.stdout.split('<div id="ref-')[1:]:
-        key, body = chunk.split('"', 1)
-        body = body.split('>', 1)[1]
-        out.append((html.unescape(key), norm(html.unescape(re.sub(r'<[^>]+>', '', body)))))
-    return out
+    return entries_html(pandoc('---\nnocite: "@*"\n---\n', f'gbt7714={style}'))
 
 # (natbib command, pandoc markdown); keys from gbt7714-examples.bib
 A, B, C = 'gbt7714.5.1:3', 'gbt7714.7.7:5', 'gbt7714.9.3.1.2:1'  # en: 1, 2, 3 authors
@@ -128,12 +144,7 @@ def cite_bst(style):
 
 def cite_csl(style):
     md = '\n\n'.join(f'T{i}: {m}' for i, (_, m) in enumerate(CITES))
-    r = subprocess.run(['pandoc', '-f', 'markdown', '-t', 'html', '--wrap=none',
-                        '-M', f'bibliography={BIB}', '-M', f'gbt7714={style}', '-M', 'suppress-bibliography=true',
-                        '-L', os.path.join(EXT, 'gbt7714.lua'), '--citeproc'],
-                       input=md, capture_output=True, text=True)
-    if r.returncode: sys.exit(r.stderr)
-    h = re.sub(r'<sup>(.*?)</sup>', r'^(\1)', r.stdout)
+    h = re.sub(r'<sup>(.*?)</sup>', r'^(\1)', pandoc(md, f'gbt7714={style}', 'suppress-bibliography=true'))
     h = html.unescape(re.sub(r'<[^>]+>', '', h))
     return dict(re.findall(r'^(T\d+):\s*(.*)$', h, re.M))
 
@@ -147,7 +158,7 @@ def cite_main(style, verbose):
     sup = lambda v: norm(v.replace(')^(', ''))  # merge adjacent superscript runs
     # xeCJK glue between CJK and Latin shows up as a space in pdftotext; not a character
     glue = lambda v: re.sub(rf'(?<={CJK}) (?=[!-~])|(?<=[!-~]) (?={CJK})', '', v)
-    b = {k: glue(sup(v)) for k, v in b.items()}
+    b = {k: glue(sup(v)) for k, v in b.items()}  # single pdftotext lines: no bbl wrap artifacts
     c = {k: sup(v) for k, v in c.items()}
     same = [k for k in b if c.get(k) == b[k]]
     print(f'cite-{style}: {len(same)}/{len(CITES)} citations identical (bst lines found: {len(b)})')
@@ -156,39 +167,56 @@ def cite_main(style, verbose):
             k = f'T{i}'
             if c.get(k) != b.get(k):
                 print(f'\n{k} {m}\n  bst: {b.get(k)}\n  csl: {c.get(k)}')
-    return same
+    return same, None
+
+def note_cites(keys):
+    """First-citation footnotes, one sentence per key, in key order."""
+    h = pandoc('\n\n'.join(f'S{i}[@{k}].' for i, k in enumerate(keys)), 'gbt7714=note', 'suppress-bibliography=true')
+    notes = dict(re.findall(r'<li id="fn(\d+)"[^>]*>(.*?)</li>', h, re.S))
+    strip = lambda v: norm(html.unescape(re.sub(r'<[^>]+>', '', re.sub(r'<a href="#fnref\d+"[^>]*>.*?</a>', '', v))))
+    return [(k, strip(notes.get(str(i + 1), ''))) for i, k in enumerate(keys)]
 
 def entries_main(style, verbose):
-    b, c = bst(style), csl(style)
-    if style == 'numeric':  # bst numbers by citation order; strip labels, compare text
+    b = bst('numeric' if style.startswith('note') else style)
+    if style == 'note-cite':
+        c = note_cites([k for k, _ in b])
+    else:
+        c = csl(style)
+    if style != 'authoryear':  # numbered styles: strip labels, compare text
         c = [(k, re.sub(r'^\[\d+\]\s*', '', v)) for k, v in c]
     bd, cd = dict(b), dict(c)
     same = [k for k in bd if cd.get(k) == bd[k]]
+    order = [k for k, _ in b] == [k for k, _ in c] if style in ('authoryear', 'numeric') else None
     print(f'{style}: {len(same)}/{len(bd)} entries identical; '
-          f'missing in CSL: {len(set(bd) - set(cd))}; order identical: {[k for k, _ in b] == [k for k, _ in c]}')
+          f'missing in CSL: {len(set(bd) - set(cd))}' + (f'; order identical: {order}' if order is not None else ''))
     if verbose:
         for k in bd:
             if cd.get(k) != bd[k]:
                 print(f'\n{k}\n  bst: {bd[k]}\n  csl: {cd.get(k)}')
-    return same
+    return same, order
 
 BASELINE = os.path.join(HERE, 'baseline.json')
-MODES = ['authoryear', 'numeric', 'cite-authoryear', 'cite-numeric']
+MODES = ['authoryear', 'numeric', 'note', 'note-cite', 'cite-authoryear', 'cite-numeric']
 
 def main():
     args = [a for a in sys.argv[1:] if not a.startswith('-')]
     verbose = '-v' in sys.argv
     modes = args or MODES
+    print('pandoc:', subprocess.run(PANDOC + ['--version'], capture_output=True, text=True).stdout.split('\n')[0])
     results = {m: (cite_main(m[5:], verbose) if m.startswith('cite-') else entries_main(m, verbose))
                for m in modes}
     base = json.load(open(BASELINE)) if os.path.exists(BASELINE) else {}
     if '--update' in sys.argv:
-        base.update({m: sorted(v) for m, v in results.items()})
+        for m, (same, order) in results.items():
+            base[m] = sorted(same)
+            if order is not None: base[m + ':order'] = order
         json.dump(base, open(BASELINE, 'w'), indent=1, ensure_ascii=False)
         print('baseline updated')
     elif '--check' in sys.argv:
-        bad = {m: sorted(set(base.get(m, [])) - set(v)) for m, v in results.items()}
+        bad = {m: sorted(set(base.get(m, [])) - set(same)) for m, (same, _) in results.items()}
         bad = {m: v for m, v in bad.items() if v}
+        for m, (_, order) in results.items():
+            if base.get(m + ':order') and order is False: bad[m + ':order'] = ['order no longer identical']
         for m, v in bad.items(): print(f'REGRESSION {m}: {v}')
         if bad: sys.exit(1)
         print('no regressions against baseline')
