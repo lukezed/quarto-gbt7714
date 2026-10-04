@@ -1,0 +1,25 @@
+---
+title: "gbt7714: note 边界用例"
+lang: zh
+bibliography: refs.bib
+filters: [gbt7714]
+gbt7714: note
+---
+
+T1 多篇同时引用：社会分层理论 [@knuth1984; @zhang2019]。
+
+T2 紧邻重复引用：如前所述 [@zhang2019]。
+
+T3 带页码：见 [@smith2020, p. 42]；纯数字页码 [@smith2020, 45]；页码范围 [@wang2015, pp. 10-12]；中文页标签 [@wang2015, 页 33]。
+
+T4 叙述式：@wang2015 认为如此；@smith2020 [p. 7] 也指出。
+
+T5 脚注内再引用：一个论断。[^a]
+
+[^a]: 依据见 @knuth1984，另参 [@zhang2019]。
+
+T6 中英文混合：[@smith2020; @wang2015]。
+
+T7 非紧邻重复引用：再看 [@knuth1984]，再看 [@zhang2019, 50]。
+
+# 参考文献 {.unnumbered}

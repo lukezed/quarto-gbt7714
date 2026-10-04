@@ -60,6 +60,29 @@ local function bib_types(meta)
   return types
 end
 
+-- Note style, narrative `@key`: citeproc puts the full author list in the prose and
+-- drops it from the note, and for repeat citations ("同N") the name vanishes entirely.
+-- Instead write the short name ourselves (as the author-year in-text form: 张三等 /
+-- Smith et al.) and keep a normal citation, so the note holds the complete entry.
+local function narrative_to_text(doc, refs)
+  local by_id = {}
+  for _, r in ipairs(refs) do by_id[r.id] = r end
+  return doc:walk({
+    Cite = function(cite)
+      local c = cite.citations
+      if #c ~= 1 or c[1].mode ~= 'AuthorInText' then return nil end
+      local r = by_id[c[1].id]
+      local names = r and (r.author or r.editor)
+      if not names or #names == 0 then return nil end
+      local name = pandoc.utils.stringify(names[1].family or names[1].literal or '')
+      if #names >= 2 then name = name .. (r.language and '等' or ' et al.') end
+      c[1].mode = 'NormalCitation'
+      cite.citations = c
+      return { pandoc.Str(name), cite }
+    end,
+  })
+end
+
 function Pandoc(doc)
   local style = pandoc.utils.stringify(doc.meta.gbt7714 or 'authoryear')
   if not STYLES[style] then
@@ -83,5 +106,6 @@ function Pandoc(doc)
   end
   doc.meta.references = refs
   doc.meta.bibliography = nil
+  if style == 'note' then doc = narrative_to_text(doc, refs) end
   return doc
 end
