@@ -221,6 +221,52 @@ local function bib_scan(meta)
   return entries
 end
 
+-- Page locator in a citation suffix (", 42", ", p. 42", ", pp. 11-13"), or nil.
+local function page_locator(suffix)
+  local s = pandoc.utils.stringify(suffix or {}):gsub('\194\160', ' ')  -- pandoc puts nbsp after "pp."
+  s = s:gsub('^%s*,?%s*', ''):gsub('%s*$', '')
+  s = s:gsub('^[Pp]+%.%s*', ''):gsub('^pages?%s+', '')
+  return s:gsub('–', '-'):match('^%d[%d%-, ]*$')
+end
+
+-- In-text author like the CSL's (et-al-min 2): "Falout et al." / "张群 等".
+-- ponytail: no given-name disambiguation; add if two cited authors share a family name.
+local function intext_author(r)
+  local names = r and (r.author or r.editor)
+  if not names or #names == 0 then return nil end
+  local n = names[1]
+  local name = n.literal or n.family
+  if not name then return nil end
+  if n['non-dropping-particle'] then name = n['non-dropping-particle'] .. ' ' .. name end
+  if #names > 1 then name = name .. (r.language and ' 等' or ' et al.') end
+  return name
+end
+
+-- GB/T 7714 citation forms the CSL cannot express (bst \citet and locator placement):
+--   @key          -> Author + citation with author suppressed: "Boobier（2020）", "Boobier[1]"
+--   [@key, 42]    -> page as a superscript after the closing bracket: "（Boobier，2020）⁴²", "[1]⁴²"
+local function gbt_cites(doc, refs)
+  local byid = {}
+  for _, r in ipairs(refs) do byid[r.id] = r end
+  return doc:walk({
+    Cite = function(c)
+      if #c.citations ~= 1 then return nil end
+      local ct = c.citations[1]
+      local out = pandoc.Inlines({})
+      if ct.mode == 'AuthorInText' then
+        local a = intext_author(byid[ct.id])
+        if a then out:insert(pandoc.Str(a)); ct.mode = 'SuppressAuthor' end
+      end
+      local loc = page_locator(ct.suffix)
+      if loc then ct.suffix = pandoc.Inlines({}) end
+      c.citations = { ct }
+      out:insert(c)
+      if loc then out:insert(pandoc.Superscript({ pandoc.Str(loc) })) end
+      return out
+    end,
+  })
+end
+
 function Pandoc(doc)
   local style = pandoc.utils.stringify(doc.meta.gbt7714 or 'authoryear')
   if not STYLES[style] then
@@ -300,5 +346,6 @@ function Pandoc(doc)
   end
   doc.meta.references = refs
   doc.meta.bibliography = nil
+  if style ~= 'note' then doc = gbt_cites(doc, refs) end
   return doc
 end
