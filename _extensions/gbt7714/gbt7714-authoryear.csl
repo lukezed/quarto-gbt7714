@@ -190,11 +190,17 @@
             </date>
             <text variable="year-suffix" />
           </else-if>
-          <else>
+          <else-if variable="issued">
             <date variable="issued">
               <date-part name="year" range-delimiter="-" />
             </date>
             <text variable="year-suffix" />
+          </else-if>
+          <else>
+            <group delimiter="-">
+              <text term="no date" form="short" />
+              <text variable="year-suffix" />
+            </group>
           </else>
         </choose>
       </if>
@@ -237,11 +243,17 @@
             </date>
             <text variable="year-suffix" />
           </else-if>
-          <else>
+          <else-if variable="issued">
             <date variable="issued">
               <date-part name="year" range-delimiter="-" />
             </date>
             <text variable="year-suffix" />
+          </else-if>
+          <else>
+            <group delimiter="-">
+              <text value="n.d." />
+              <text variable="year-suffix" />
+            </group>
           </else>
         </choose>
       </if>
@@ -724,12 +736,20 @@
         <text variable="publisher" />
       </if>
       <else-if type="book chapter classic entry-dictionary entry-encyclopedia map paper-conference periodical thesis" variable="publisher" match="any">
-        <group delimiter="：">
+        <group delimiter="，">
           <group delimiter="：">
-            <text variable="publisher-place" />
-            <text variable="publisher" />
+            <group delimiter="：">
+              <text variable="publisher-place" />
+              <text variable="publisher" />
+            </group>
+            <text variable="page" />
           </group>
-          <text variable="page" />
+          <choose>
+            <if type="collection">
+              <!-- bst archive: full date after the publisher, also in author-year -->
+              <text macro="date" />
+            </if>
+          </choose>
         </group>
       </else-if>
       <else-if type="patent report" match="any">
@@ -766,12 +786,20 @@
         <text variable="publisher" />
       </if>
       <else-if type="book chapter classic entry-dictionary entry-encyclopedia map paper-conference periodical thesis" variable="publisher" match="any">
-        <group delimiter="：">
+        <group delimiter="，">
           <group delimiter="：">
-            <text variable="publisher-place" />
-            <text variable="publisher" />
+            <group delimiter="：">
+              <text variable="publisher-place" />
+              <text variable="publisher" />
+            </group>
+            <text variable="page" />
           </group>
-          <text variable="page" />
+          <choose>
+            <if type="collection">
+              <!-- bst archive: full date after the publisher, also in author-year -->
+              <text macro="date-en" />
+            </if>
+          </choose>
         </group>
       </else-if>
       <else-if type="patent report" match="any">
