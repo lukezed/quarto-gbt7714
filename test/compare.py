@@ -2,8 +2,12 @@
 
 Usage: python3 test/compare.py authoryear|numeric [-v]
 Prints the share of identical entries, whether the sort order matches, and (-v) each diff.
+
+Citation mode: python3 test/compare.py cite-authoryear|cite-numeric [-v]
+Compiles CITES with gbt7714.sty + bst (xelatex) and pandoc, compares each line.
+Superscripts are marked as ^(...) on both sides.
 """
-import html, json, os, re, subprocess, sys, tempfile
+import html, json, os, re, shutil, subprocess, sys, tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 UP = os.path.join(HERE, 'upstream')
@@ -57,7 +61,81 @@ def csl(style):
         out.append((html.unescape(key), norm(html.unescape(re.sub(r'<[^>]+>', '', body)))))
     return out
 
+# (natbib command, pandoc markdown); keys from gbt7714-examples.bib
+A, B, C = 'gbt7714.5.1:3', 'gbt7714.7.7:5', 'gbt7714.9.3.1.2:1'  # en: 1, 2, 3 authors
+D, E, F = 'gbt7714.5.1:1', 'gbt7714.b.4:7', 'gbt7714.b.4:11'     # zh: 1, 2, 3 authors
+G1, G2 = 'gbt7714.8.5.3:4', 'gbt7714.8.5.3:5'                    # same authors, same year
+CITES = [
+    (rf'\citep{{{A}}}', f'[@{A}]'),
+    (rf'\citet{{{A}}}', f'@{A}'),
+    (rf'\citep[42]{{{A}}}', f'[@{A}, 42]'),
+    (rf'\citep{{{B}}}', f'[@{B}]'),
+    (rf'\citep{{{C}}}', f'[@{C}]'),
+    (rf'\citet[42]{{{C}}}', f'@{C} [42]'),
+    (rf'\citep{{{D}}}', f'[@{D}]'),
+    (rf'\citet{{{D}}}', f'@{D}'),
+    (rf'\citep[35]{{{D}}}', f'[@{D}, 35]'),
+    (rf'\citep{{{E}}}', f'[@{E}]'),
+    (rf'\citep{{{F}}}', f'[@{F}]'),
+    (rf'\citet{{{F}}}', f'@{F}'),
+    (rf'\citep[11-13]{{{E}}}', f'[@{E}, pp. 11-13]'),
+    (rf'\citep{{{G1},{G2}}}', f'[@{G1}; @{G2}]'),
+    (rf'\citep{{{A},{D}}}', f'[@{A}; @{D}]'),
+    (rf'\citep{{{A},{B},{C}}}', f'[@{A}; @{B}; @{C}]'),
+]
+
+def cite_bst(style):
+    body = '\n\n'.join(f'T{i}: {tex}' for i, (tex, _) in enumerate(CITES))
+    tex = (f'\\documentclass{{ctexart}}\n\\usepackage[paperwidth=100cm,paperheight=100cm]{{geometry}}\n'
+           f'\\usepackage{{gbt7714}}\n\\bibliographystyle{{gbt7714-{style}}}\n'
+           f'\\renewcommand{{\\textsuperscript}}[1]{{SUP(#1)}}\n\\pagestyle{{empty}}\n'
+           f'\\begin{{document}}\n{body}\n\\bibliography{{gbt7714-examples}}\n\\end{{document}}\n')
+    with tempfile.TemporaryDirectory() as d:
+        for f in ('gbt7714.sty', f'gbt7714-{style}.bst', 'gbt7714-examples.bib'):
+            shutil.copy(os.path.join(UP, f), d)
+        open(os.path.join(d, 'a.tex'), 'w', encoding='utf-8').write(tex)
+        for cmd in (['xelatex', '-interaction=batchmode', 'a'], ['bibtex', 'a'],
+                    ['xelatex', '-interaction=batchmode', 'a'], ['xelatex', '-interaction=batchmode', 'a']):
+            subprocess.run(cmd, cwd=d, capture_output=True)
+        bbox = subprocess.run(['pdftotext', '-bbox', 'a.pdf', '-'], cwd=d, capture_output=True, text=True).stdout
+    # Rebuild lines from word boxes: plain pdftotext splits a superscript that overlaps "）".
+    words = sorted((float(y), float(x), html.unescape(w)) for x, y, w in re.findall(
+        r'xMin="([\d.]+)" yMin="[\d.]+" xMax="[\d.]+" yMax="([\d.]+)">(.*?)</word>', bbox))
+    lines, last = [], None
+    for y, x, w in words:
+        if last is None or y - last > 5: lines.append([])  # superscripts sit < 5pt off the baseline
+        lines[-1].append((x, w)); last = y
+    txt = '\n'.join(' '.join(w for _, w in sorted(ws)) for ws in lines)
+    txt = re.sub(r'\s*SUP\(', '^(', txt)
+    return dict(re.findall(r'^(T\d+):\s*(.*)$', txt, re.M))
+
+def cite_csl(style):
+    md = '\n\n'.join(f'T{i}: {m}' for i, (_, m) in enumerate(CITES))
+    r = subprocess.run(['pandoc', '-f', 'markdown', '-t', 'html', '--wrap=none',
+                        '-M', f'bibliography={BIB}', '-M', f'gbt7714={style}', '-M', 'suppress-bibliography=true',
+                        '-L', os.path.join(EXT, 'gbt7714.lua'), '--citeproc'],
+                       input=md, capture_output=True, text=True)
+    if r.returncode: sys.exit(r.stderr)
+    h = re.sub(r'<sup>(.*?)</sup>', r'^(\1)', r.stdout)
+    h = html.unescape(re.sub(r'<[^>]+>', '', h))
+    return dict(re.findall(r'^(T\d+):\s*(.*)$', h, re.M))
+
+def cite_main(style, verbose):
+    b, c = cite_bst(style), cite_csl(style)
+    sup = lambda v: norm(v.replace(')^(', ''))  # merge adjacent superscript runs
+    b = {k: sup(v) for k, v in b.items()}
+    c = {k: sup(v) for k, v in c.items()}
+    same = [k for k in b if c.get(k) == b[k]]
+    print(f'cite-{style}: {len(same)}/{len(CITES)} citations identical (bst lines found: {len(b)})')
+    if verbose:
+        for i, (tex, m) in enumerate(CITES):
+            k = f'T{i}'
+            if c.get(k) != b.get(k):
+                print(f'\n{k} {m}\n  bst: {b.get(k)}\n  csl: {c.get(k)}')
+
 def main():
+    if sys.argv[1].startswith('cite-'):
+        return cite_main(sys.argv[1][5:], '-v' in sys.argv)
     style, verbose = sys.argv[1], '-v' in sys.argv
     b, c = bst(style), csl(style)
     if style == 'numeric':  # bst numbers by citation order; strip labels, compare text
