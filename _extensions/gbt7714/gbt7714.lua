@@ -348,7 +348,7 @@ local function gbt_cites(doc, refs, style)
       -- under lang: zh citeproc only knows "页"; a bare number is read as a page locator
       if post then
         ct.suffix = page and pandoc.Inlines({ pandoc.Str(','), pandoc.Space(), pandoc.Str(post) })
-          or pandoc.Inlines({ pandoc.Str('，' .. post) })
+          or pandoc.Inlines({ pandoc.Str(','), pandoc.Space(), pandoc.Str('{' .. post .. '}') })  -- braced: citeproc keeps it as a literal locator
       end
       out:insert(pandoc.Cite({}, { ct })); return out
     end
@@ -375,7 +375,7 @@ local function gbt_cites(doc, refs, style)
           local post, page = postnote(ct.suffix)
           if post then
             ct.suffix = page and pandoc.Inlines({ pandoc.Str(','), pandoc.Space(), pandoc.Str(post) })
-              or pandoc.Inlines({ pandoc.Str('，' .. post) })
+              or pandoc.Inlines({ pandoc.Str(','), pandoc.Space(), pandoc.Str('{' .. post .. '}') })  -- braced: citeproc keeps it as a literal locator
           end
         end
         return c
@@ -713,5 +713,20 @@ function Pandoc(doc)
   doc.meta.bibliography = nil
   doc = trim_cite_spaces(doc, refs)
   doc = gbt_cites(doc, refs, style)
-  return run_citeproc(doc, refs, style)
+  doc = run_citeproc(doc, refs, style)
+  if style == 'note' then
+    -- citeproc puts a space after a citation prefix ("见 博伯尔"); Chinese takes none
+    doc = doc:walk({ Note = function(n)
+      return n:walk({ Inlines = function(ils)
+        local out = pandoc.Inlines({})
+        for i, el in ipairs(ils) do
+          if not (el.t == 'Space' and is_cjk_cp(edge_cp(ils[i - 1], true)) and is_cjk_cp(edge_cp(ils[i + 1], false))) then
+            out:insert(el)
+          end
+        end
+        return out
+      end })
+    end })
+  end
+  return doc
 end
