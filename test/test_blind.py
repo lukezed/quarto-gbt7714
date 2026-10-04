@@ -5,6 +5,7 @@ import subprocess
 import sys
 import tempfile
 import zipfile
+import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
 assert shutil.which('quarto'), 'These integration checks require Quarto.'
@@ -24,6 +25,7 @@ def fixture(blind):
     setting = '' if blind is None else f'blind: {str(blind).lower()}\n'
     return f'''---
 title: PublicTitle923
+paper-style: {'manuscript' if '--manuscript' in sys.argv else 'student'}
 {setting}author:
   - name: PrivateAuthor923
     email: private923@example.org
@@ -75,11 +77,19 @@ with tempfile.TemporaryDirectory(prefix='quarto-blind-') as tmp:
                 # Include core properties, custom properties, headers, footers,
                 # comments and all other XML parts, not just document.xml.
                 with zipfile.ZipFile(output) as archive:
+                    for name in archive.namelist():
+                        if name.endswith(('.xml', '.rels')):
+                            ET.fromstring(archive.read(name))
                     content = '\n'.join(
                         archive.read(name).decode('utf-8')
                         for name in archive.namelist() if name.endswith('.xml')
                     )
             elif fmt == 'pdf':
+                if '--manuscript' in sys.argv:
+                    pages = subprocess.check_output(['pdftotext', str(output), '-'], text=True).split('\f')
+                    assert 'PublicTitle923' in pages[0] and 'PublicAbstract923' not in pages[0]
+                    assert 'PublicAbstract923' in pages[1] and 'PublicBody923' not in pages[1]
+                    assert 'PublicTitle923' in pages[2] and 'PublicBody923' in pages[2]
                 content = '\n'.join(subprocess.run(
                     command, text=True, capture_output=True, check=True,
                 ).stdout for command in (

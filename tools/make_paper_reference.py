@@ -33,8 +33,9 @@ for style in styles.findall('w:style', NS):
         props = child(style, 'pPr')
         child(props, 'spacing', before=0, after=120, line=360, lineRule='auto')
         child(props, 'widowControl')
-    if name == 'ImageCaption':
-        # Quarto uses this style for both figure and table captions.
+    if name in ('ImageCaption', 'Compact'):
+        # Quarto uses Compact for images and ImageCaption for captions.
+        # Keep images with captions, and captions with following tables.
         child(child(style, 'pPr'), 'keepNext')
     if name in ('Author', 'Date'):
         props = child(style, 'rPr')
@@ -51,11 +52,58 @@ for style in styles.findall('w:style', NS):
         pprops = child(style, 'pPr')
         child(pprops, 'keepNext')
         child(pprops, 'spacing', before=180, after=120, line=240, lineRule='auto')
+# Dedicated manuscript styles leave the compact student/journal Word layouts intact.
+for name in ('ManuscriptTitle', 'ManuscriptAuthor', 'ManuscriptHeading', 'ManuscriptAbstract', 'ManuscriptBody'):
+    style = ET.SubElement(styles, '{' + W + '}style', {'{' + W + '}type': 'paragraph', '{' + W + '}styleId': name})
+    child(style, 'name', val=name)
+    child(style, 'basedOn', val='BodyText')
+    props = child(style, 'pPr')
+    child(props, 'spacing', before=0, after=0, line=480, lineRule='auto')
+    child(props, 'ind', firstLine=0)
+    child(props, 'widowControl')
+    run = child(style, 'rPr')
+    child(run, 'sz', val=24)
+    child(run, 'szCs', val=24)
+    if name in ('ManuscriptTitle', 'ManuscriptAuthor', 'ManuscriptHeading'):
+        child(props, 'jc', val='center')
+    if name in ('ManuscriptTitle', 'ManuscriptHeading'):
+        child(run, 'b')
+        child(props, 'keepNext')
+        child(props, 'spacing', before=1440 if name == 'ManuscriptTitle' else 0, after=240)
+    if name == 'ManuscriptBody':
+        child(props, 'ind', firstLine=480)
+
 files['word/styles.xml'] = ET.tostring(styles, encoding='utf-8', xml_declaration=True)
 document = ET.fromstring(files['word/document.xml'])
 section = document.find('w:body/w:sectPr', NS)
 child(section, 'pgSz', w=11906, h=16838)
 child(section, 'pgMar', top=1440, right=1440, bottom=1440, left=1440, header=720, footer=720, gutter=0)
+# Standard page field in the right header, including the title page.
+R = 'http://schemas.openxmlformats.org/package/2006/relationships'
+ET.register_namespace('', R)
+rels = ET.fromstring(files['word/_rels/document.xml.rels'])
+rid = 'rIdPaperPageHeader'
+ET.SubElement(rels, '{' + R + '}Relationship', {
+    'Id': rid, 'Type': 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/header',
+    'Target': 'paper-header.xml'})
+files['word/_rels/document.xml.rels'] = ET.tostring(rels, encoding='utf-8', xml_declaration=True)
+for old in list(section.findall('w:headerReference', NS)):
+    section.remove(old)
+header_ref = ET.Element('{' + W + '}headerReference', {
+    '{' + W + '}type': 'default',
+    '{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id': rid})
+section.insert(0, header_ref)
+files['word/paper-header.xml'] = (
+    '<w:hdr xmlns:w="' + W + '"><w:p><w:pPr><w:jc w:val="right"/>'
+    '<w:spacing w:before="0" w:after="0"/></w:pPr>'
+    '<w:fldSimple w:instr="PAGE"><w:r><w:t>1</w:t></w:r></w:fldSimple></w:p></w:hdr>'
+).encode()
+content_types = ET.fromstring(files['[Content_Types].xml'])
+ET.SubElement(content_types, '{http://schemas.openxmlformats.org/package/2006/content-types}Override', {
+    'PartName': '/word/paper-header.xml',
+    'ContentType': 'application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml'})
+files['[Content_Types].xml'] = ET.tostring(content_types, encoding='utf-8', xml_declaration=True)
+
 files['word/document.xml'] = ET.tostring(document, encoding='utf-8', xml_declaration=True)
 out = ROOT / '_extensions/gbt7714-paper/paper-reference.docx'
 with ZipFile(out, 'w', ZIP_DEFLATED) as archive:

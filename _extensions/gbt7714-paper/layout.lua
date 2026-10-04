@@ -41,6 +41,96 @@ local function author_affiliations(meta)
   return lines
 end
 
+
+local function blocks(value)
+  if not value then return pandoc.List({}) end
+  local kind = pandoc.utils.type(value)
+  if kind == 'Blocks' then return value end
+  return pandoc.List({pandoc.Para(kind == 'Inlines' and value or {pandoc.Str(text(value))})})
+end
+
+local function styled(content, name, class)
+  return pandoc.Div(content, pandoc.Attr('', {class or 'paper-front-heading'}, {['custom-style'] = name}))
+end
+
+local function manuscript(doc)
+  local meta = doc.meta
+  local pdf, word = quarto.doc.is_format('pdf'), quarto.doc.is_format('docx')
+  local title = blocks(meta.title)
+  local abstract = blocks(meta.abstract)
+  local prefix = pandoc.List({})
+  local function pagebreak()
+    if pdf then return pandoc.RawBlock('latex', '\\clearpage') end
+    if word then return pandoc.RawBlock('openxml', '<w:p><w:r><w:br w:type="page"/></w:r></w:p>') end
+    return pandoc.RawBlock('html', '<div class="paper-pagebreak"></div>')
+  end
+  if pdf then
+    append_header(meta, [[
+\usepackage{fancyhdr}
+\pagestyle{fancy}\fancyhf{}\fancyhead[R]{\thepage}
+\renewcommand{\headrulewidth}{0pt}
+\fancypagestyle{plain}{\fancyhf{}\fancyhead[R]{\thepage}\renewcommand{\headrulewidth}{0pt}}
+\makeatletter
+\renewcommand{\maketitle}{%
+  \thispagestyle{plain}\null\vspace{2cm}
+  \begin{center}
+  {\large\bfseries \@title\par}\vspace{1.5\baselineskip}
+  {\normalsize \@author\par}\vspace{\baselineskip}
+  {\normalsize \@date\par}
+  \end{center}\clearpage}
+\makeatother
+]])
+  elseif word then
+    prefix:insert(styled(title, 'ManuscriptTitle'))
+    if meta.subtitle then prefix:insert(styled(blocks(meta.subtitle), 'ManuscriptAuthor')) end
+    local authors = meta.author or {}
+    if pandoc.utils.type(authors) ~= 'List' then authors = {authors} end
+    for _, author in ipairs(authors) do
+      prefix:insert(styled(blocks(type(author) == 'table' and author.name or author), 'ManuscriptAuthor'))
+    end
+    if meta.date then prefix:insert(styled(blocks(meta.date), 'ManuscriptAuthor')) end
+    -- The writer otherwise emits a second title block before these pages.
+    meta.title, meta.subtitle, meta.author, meta.date = nil, nil, nil, nil
+    prefix:insert(pagebreak())
+  end
+  local abstract_page = pandoc.List({})
+  if #abstract > 0 then
+    if pdf then
+      abstract_page:insert(pandoc.RawBlock('latex', '\\begin{center}\\bfseries 摘要\\end{center}'))
+    else
+      abstract_page:insert(styled({pandoc.Para({pandoc.Strong({pandoc.Str('摘要')})})}, 'ManuscriptHeading'))
+    end
+    abstract_page:extend(abstract)
+  end
+  if meta.keywords then
+    local values = meta.keywords
+    if pandoc.utils.type(values) ~= 'List' then values = {values} end
+    local words = {}
+    for _, value in ipairs(values) do words[#words + 1] = text(value) end
+    abstract_page:insert(pandoc.Para({pandoc.Strong({pandoc.Str('关键词：')}), pandoc.Space(), pandoc.Str(table.concat(words, '；'))}))
+  end
+  if #abstract_page > 0 then
+    prefix:insert(styled(abstract_page, 'ManuscriptAbstract', 'paper-abstract-page'))
+    prefix:insert(pagebreak())
+  end
+  meta.abstract, meta.keywords = nil, nil
+  if pdf then
+    local latex = pandoc.write(pandoc.Pandoc(title), 'latex')
+    prefix:insert(pandoc.RawBlock('latex', '\\begin{center}\\bfseries\n' .. latex .. '\\end{center}'))
+  else
+    prefix:insert(styled(title, 'ManuscriptHeading'))
+  end
+  doc.blocks = pandoc.Pandoc(doc.blocks):walk({Header = function(header)
+    if header.identifier == '参考文献' or header.identifier == 'references' then
+      return {pagebreak(), header}
+    end
+  end}).blocks
+  if word then
+    prefix:insert(styled(doc.blocks, 'ManuscriptBody', 'paper-manuscript-text'))
+  else prefix:extend(doc.blocks) end
+  doc.blocks = prefix
+end
+
 function Pandoc(doc)
   local meta = doc.meta
   local style = text(meta['paper-style'])
@@ -91,6 +181,8 @@ function Pandoc(doc)
       meta.author = authors
     end
   end
+
+  if style == 'manuscript' then manuscript(doc) end
 
   local prefix = pandoc.List({})
   if style == 'student' and text(meta.blind) ~= 'true' then

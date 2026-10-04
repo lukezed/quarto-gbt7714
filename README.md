@@ -55,7 +55,11 @@
 <details>
 <summary>投稿初稿预览</summary>
 
-![单栏投稿初稿首页，含摘要和关键词](docs/images/manuscript.png)
+投稿版借鉴 APA 稿件的页面组织：独立标题页 → 独立摘要与关键词页 → 正文新页（重复论文标题），参考文献也另起一页。PDF、Word 使用双倍正文行距；引用格式仍为 GB/T 7714，具体投稿要求请按目标期刊调整。
+
+| 标题页 | 摘要页 | 正文首页 |
+|---|---|---|
+| ![投稿稿标题页](docs/images/manuscript.png) | ![投稿稿摘要页](docs/images/manuscript-abstract.png) | ![投稿稿正文首页](docs/images/manuscript-body.png) |
 
 </details>
 
@@ -80,7 +84,7 @@
 | 模板 | 使用场景 | PDF / HTML | Word |
 |---|---|---|---|
 | `student` | 课程论文、读书报告、学生作业 | 单栏，包含学号、课程、指导教师 | 可编辑单栏 |
-| `manuscript` | 投稿初稿、导师审阅 | 单栏，摘要、关键词和完整正文 | 可编辑单栏 |
+| `manuscript` | 投稿初稿、导师审阅 | 独立标题页、摘要页、正文；HTML 分区，打印时分页 | 同样分页，正文双倍行距 |
 | `journal` | 期刊风格文章、成稿展示 | PDF 双栏；HTML 宽屏双栏、窄屏单栏 | 可编辑单栏 |
 
 源文件分别在 [student](templates/student/paper.qmd)、[manuscript](templates/manuscript/paper.qmd)、[journal](templates/journal/paper.qmd)。先克隆或下载仓库：
@@ -121,6 +125,10 @@ gbt7714: authoryear   # numeric | note 也可
 ```
 
 这些写作格式已经加载引用 filter，无需再添加 `filters: [gbt7714]`。只需要引用适配的项目，继续使用下文的 `filters: [gbt7714]` 即可。
+
+### 投稿稿的页面结构
+
+选择 `paper-style: manuscript` 后，PDF 和 Word 会自动生成标题页、摘要页和正文分页，无需在 `.qmd` 正文中手写分页符。摘要页包含 `abstract` 和 `keywords`；不提供二者时直接进入正文，不生成空摘要页。匿名稿保留标题页及分页结构，隐藏作者和机构。HTML 按相同顺序分区，浏览器打印时分页。
 
 ### 匿名稿
 

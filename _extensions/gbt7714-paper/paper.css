@@ -29,3 +29,14 @@ img, svg, video { max-width: 100%; }
   .paper-body.paper-journal, main:has(.paper-journal) > #refs { column-count: 2; column-gap: 7mm; }
   #quarto-header, #quarto-sidebar, #quarto-margin-sidebar { display: none; }
 }
+
+/* Manuscript front matter: distinct reading sections and printed pages. */
+main:has(.paper-manuscript) #title-block-header { text-align: center; padding-block: 3rem; }
+main:has(.paper-manuscript) #title-block-header .quarto-title-authors { justify-content: center; }
+.paper-front-heading p { text-align: center; font-weight: bold; }
+.paper-abstract-page { margin-block: 3rem; }
+@media print {
+  main:has(.paper-manuscript) #title-block-header { break-after: page; padding-top: 2cm; }
+  .paper-pagebreak { break-after: page; }
+  .paper-abstract-page { margin: 0; }
+}
