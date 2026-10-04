@@ -184,35 +184,54 @@ local RAW_FIELDS = { year = true, booktitle = true, holder = true, scale = true,
                      key = true, organization = true, langid = true, language = true, title = true, author = true,
                      journal = true, journaltitle = true, address = true, location = true, publisher = true }
 
+-- Fields of one entry body, in order: {braced} (also kept raw as name_braced), "quoted" or bare.
+-- ponytail: no @string expansion or # concatenation; bare macro names are kept verbatim.
+local function bib_fields(body, e)
+  local pos = 1
+  while true do
+    local _, stop, name = body:find('^[%s,]*([%w_%-:.]+)%s*=%s*', pos)
+    if not stop then return end
+    pos = stop + 1
+    local c, val, raw = body:sub(pos, pos)
+    if c == '{' then
+      local a, b = body:find('%b{}', pos)
+      if not a then return end
+      raw = body:sub(a + 1, b - 1); val = raw:gsub('[{}]', ''); pos = b + 1
+    elseif c == '"' then
+      local a, b = body:find('^"[^"]*"', pos)
+      if not a then return end
+      val = body:sub(a + 1, b - 1); pos = b + 1
+    else
+      local a, b = body:find('^[^,}%s]+', pos)
+      if not a then return end
+      val = body:sub(a, b); pos = b + 1
+    end
+    name = name:lower()
+    if RAW_FIELDS[name] then e[name] = val; e[name .. '_braced'] = raw end
+  end
+end
+
 local function bib_scan(meta)
   local entries, bibs = {}, meta.bibliography
   if bibs == nil then return entries end
   if pandoc.utils.type(bibs) ~= 'List' then bibs = { bibs } end
   for _, b in ipairs(bibs) do
     local path = pandoc.utils.stringify(b)
-    local f = path:match('%.bib$') and io.open(path)
-    if f then
-      local text = '\n' .. f:read('a')
-      f:close()
-      for chunk in text:gsub('\n@', '\0@'):gmatch('%z@([^%z]*)') do
-        local t, k, body = chunk:match('^(%w+)%s*{%s*([^,%s]+)%s*,(.*)$')
-        if not t then goto continue end
-        local e = { type = t:lower() }
-        for name, val in body:gmatch('([%w_-]+)%s*=%s*"([^"]*)"') do  -- quoted / bare values
-          if RAW_FIELDS[name:lower()] then e[name:lower()] = val end
-        end
-        for name, val in body:gmatch('([%w_-]+)%s*=%s*(%d+)%s*[,}\n]') do
-          if RAW_FIELDS[name:lower()] then e[name:lower()] = val end
-        end
-        for name, val in body:gmatch('([%w_-]+)%s*=%s*(%b{})') do
-          name = name:lower()
-          if RAW_FIELDS[name] then
-            e[name] = val:sub(2, -2):gsub('[{}]', '')
-            e[name .. '_braced'] = val:sub(2, -2)
+    if path:lower():match('%.bib$') then
+      local f = io.open(path)
+      if not f then
+        warning('gbt7714: cannot read ' .. path .. '; entry types and sort keys fall back to pandoc defaults')
+      else
+        local text = '\n' .. f:read('a'):gsub('^\239\187\191', '')  -- drop UTF-8 BOM
+        f:close()
+        for chunk in text:gsub('\n[ \t]*@', '\0@'):gmatch('%z@([^%z]*)') do
+          local t, k, body = chunk:match('^(%w+)%s*{%s*([^,%s]+)%s*,(.*)$')
+          if t then
+            local e = { type = t:lower() }
+            bib_fields(body, e)
+            entries[k] = e
           end
         end
-        entries[k] = e
-        ::continue::
       end
     end
   end
@@ -392,7 +411,9 @@ end
 -- (CJK without `key` sorts by code point, after any pinyin `key`).
 local LANG_ORDER = { zh = 1, ja = 2, en = 3, ru = 4 }
 local function bst_sort_key(raw, r, lang)
-  local year = raw.year or ''
+  -- bst sorts on the year field; biblatex `date`, CSL-JSON/YAML and crossref give only r.issued
+  local dp = r.issued and r.issued['date-parts'] and r.issued['date-parts'][1]
+  local year = raw.year or (dp and dp[1] and tostring(dp[1])) or ''
   local function names(list) return list and #list > 0 and sort_names(list, year) or nil end
   local who = raw.key
   if who == nil or who == '' then
