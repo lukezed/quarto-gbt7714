@@ -248,7 +248,8 @@ end
 -- Chinese text takes no space around a citation ("再生产 [@a] 认为" -> "再生产[@a]认为").
 -- xeCJK drops such spaces in PDF; HTML and Word would keep them, so drop them here.
 local function is_cjk_cp(cp)
-  return cp and ((cp >= 0x3000 and cp <= 0x9FFF) or (cp >= 0xFF00 and cp <= 0xFFEF))
+  return cp and ((cp >= 0x3000 and cp <= 0x9FFF) or (cp >= 0xFF00 and cp <= 0xFFEF)
+    or (cp >= 0x2014 and cp <= 0x201F) or cp == 0x2026)  -- ——“”‘’…
 end
 local function edge_cp(el, last)
   if not el or el.t ~= 'Str' then return nil end
@@ -344,6 +345,91 @@ local function gbt_cites(doc, refs, style)
       return out
     end,
   })
+end
+
+-- bst/natbib compress: runs of 2+ consecutive numbers become "a-b" with a hyphen, written
+-- order kept ("[7-8]", "[1-2,6]", "[6,1,4]"); citeproc gives "[7,8]", "[1–3]".
+-- Works on the bracket's inlines, so link-citations (each number a Link) survive.
+local function compress(ils)
+  local s = pandoc.utils.stringify(ils)
+  if not s:match('^%[[%d,%-\226\128\147]+%]$') then return nil end
+  local toks = {}  -- { n = number, il = inline or nil }
+  local dash = false
+  for _, il in ipairs(ils) do
+    local t = pandoc.utils.stringify(il)
+    if il.t == 'Link' then
+      local n = tonumber(t)
+      if dash and #toks > 0 then
+        for i = toks[#toks].n + 1, n - 1 do toks[#toks + 1] = { n = i } end
+      end
+      toks[#toks + 1] = { n = n, il = il }; dash = false
+    else
+      t = t:gsub('\226\128\147', '-')
+      for num, d in t:gmatch('(%d*)(%-?)') do
+        if num ~= '' then
+          local n = tonumber(num)
+          if dash and #toks > 0 then
+            for i = toks[#toks].n + 1, n - 1 do toks[#toks + 1] = { n = i } end
+          end
+          toks[#toks + 1] = { n = n }; dash = false
+        end
+        if d == '-' then dash = true end
+      end
+    end
+  end
+  local function show(tk) return tk.il or pandoc.Str(tostring(tk.n)) end
+  local out, i = pandoc.Inlines({ pandoc.Str('[') }), 1
+  while i <= #toks do
+    local j = i
+    while toks[j + 1] and toks[j + 1].n == toks[j].n + 1 do j = j + 1 end
+    if i > 1 then out:insert(pandoc.Str(',')) end
+    out:insert(show(toks[i]))
+    if j > i then out:insert(pandoc.Str('-')); out:insert(show(toks[j])) end
+    i = j + 1
+  end
+  out:insert(pandoc.Str(']'))
+  return out
+end
+
+-- Run citeproc here, so the numbers can be compressed afterwards: Quarto offers no hook after
+-- its own citeproc. Cites that are not references (@fig-x, @sec-y) are held back for Quarto's
+-- crossref; resolved cites become Span.citation (as pandoc's HTML writer marks them), and the
+-- references are dropped from the metadata so a later citeproc pass has nothing to do.
+local function run_citeproc(doc, refs, style)
+  local known, held = { ['*'] = true }, {}  -- nocite: "@*"
+  for _, r in ipairs(refs) do known[r.id] = true end
+  doc = doc:walk({
+    Cite = function(c)
+      for _, ct in ipairs(c.citations) do
+        if not known[ct.id] then
+          held[#held + 1] = c
+          return pandoc.Span({}, { ['gbt-held'] = tostring(#held) })
+        end
+      end
+    end,
+  })
+  doc = pandoc.utils.citeproc(doc)
+  doc = doc:walk({
+    Cite = function(c)
+      local ids = {}
+      for _, ct in ipairs(c.citations) do ids[#ids + 1] = ct.id end
+      local content = c.content
+      if style == 'numeric' then
+        content = content:walk({ Superscript = function(sup)
+          local c2 = compress(sup.content)
+          if c2 then return pandoc.Superscript(c2) end
+        end })
+      end
+      return pandoc.Span(content, { class = 'citation', ['data-cites'] = table.concat(ids, ' ') })
+    end,
+    Span = function(sp)
+      local i = sp.attributes['gbt-held']
+      if i then return held[tonumber(i)] end
+    end,
+  })
+  doc.meta.references = nil
+  doc.meta['suppress-bibliography'] = true  -- a second citeproc pass would empty #refs
+  return doc
 end
 
 -- Raw .bib fields the bst sorts on but pandoc drops or reshapes (key, year, langid, ...).
@@ -538,5 +624,5 @@ function Pandoc(doc)
   doc.meta.bibliography = nil
   doc = trim_cite_spaces(doc, refs)
   doc = gbt_cites(doc, refs, style)
-  return doc
+  return run_citeproc(doc, refs, style)
 end
