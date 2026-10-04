@@ -6,6 +6,11 @@
 local dir = pandoc.path.directory(PANDOC_SCRIPT_FILE)
 local STYLES = { authoryear = true, numeric = true, note = true }
 
+-- Lua's %s/%w/%a and string.lower follow the C locale, which under pandoc treats some UTF-8
+-- bytes as space/letters (张 = E5 BC A0; 0xA0 matches %s). So: explicit ASCII classes everywhere
+-- text may be non-ASCII, and this for case-folding.
+local function ascii_lower(s) return (s:gsub('[A-Z]', string.lower)) end
+
 local function warning(msg)
   if quarto and quarto.log and quarto.log.warning then quarto.log.warning(msg) else io.stderr:write('[WARNING] ', msg, '\n') end
 end
@@ -36,7 +41,7 @@ local function sentence_case(title)
     traverse = 'topdown',  -- so a Span is seen (and skipped) before its Strs
     Span = function(sp) first = false; return sp, false end,
     Str = function(s)
-      local t = s.text:gsub('[A-Z]', string.lower)  -- ASCII only, like bst change.case$; string.lower alone mangles UTF-8
+      local t = ascii_lower(s.text)  -- ASCII only, like bst change.case$
       if first then t = s.text:sub(1, 1) .. t:sub(2); first = false end
       return pandoc.Str(t)
     end,
@@ -104,8 +109,8 @@ local REVISED = { ['revised edition'] = 'Rev. ed.', ['revised ed.'] = 'Rev. ed.'
 local function edition(e, elang)
   if e == nil then return nil end
   local s = pandoc.utils.stringify(e)
-  local n = s:match('^(%d+)') or WORDNUM[s:lower()]
-  if not n then return REVISED[s:lower()] or s end
+  local n = s:match('^(%d+)') or WORDNUM[ascii_lower(s)]
+  if not n then return REVISED[ascii_lower(s)] or s end
   n = tostring(n)
   if n == '1' then return nil end
   local term = (elang == 'zh' or elang == 'ja') and '版' or elang == 'ru' and 'изд.' or 'ed.'
@@ -121,9 +126,9 @@ local PINYIN = {}
 for w in ('a ai an ang ao ba bai ban bang bao bei ben beng bi bian biao bie bin bing bo bu ca cai can cang cao ce cen ceng cha chai chan chang chao che chen cheng chi chong chou chu chuai chuan chuang chui chun chuo ci cong cou cu cuan cui cun cuo da dai dan dang dao de dei deng di dia dian diao die ding diu dong dou du duan dui dun duo e ei en eng er fa fan fang fei fen feng fo fou fu ga gai gan gang gao ge gei gen geng gong gou gu gua guai guan guang gui gun guo ha hai han hang hao he hei hen heng hong hou hu hua huai huan huang hui hun huo ji jia jian jiang jiao jie jin jing jiong jiu ju juan jue jun ka kai kan kang kao ke ken keng kong kou ku kua kuai kuan kuang kui kun kuo la lai lan lang lao le lei leng li lia lian liang liao lie lin ling liu long lou lu luan lun luo lyu lyue ma mai man mang mao me mei men meng mi mian miao mie min ming miu mo mou mu na nai nan nang nao ne nei nen neng ni nian niang niao nie nin ning niu nong nu nuan nuo nyu nyue o ou pa pai pan pang pao pei pen peng pi pian piao pie pin ping po pou pu qi qia qian qiang qiao qie qin qing qiong qiu qu quan que qun ran rang rao re ren reng ri rong rou ru ruan rui run ruo sa sai san sang sao se sen seng sha shai shan shang shao she shei shen sheng shi shou shu shua shuai shuan shuang shui shun shuo si song sou su suan sui sun suo ta tai tan tang tao te teng ti tian tiao tie ting tong tou tu tuan tui tun tuo wa wai wan wang wei wen weng wo wu xi xia xian xiang xiao xie xin xing xiong xiu xu xuan xue xun ya yan yang yao ye yi yin ying yong you yu yuan yue yun za zai zan zang zao ze zei zen zeng zha zhai zhan zhang zhao zhe zhei zhen zheng zhi zhong zhou zhu zhua zhuai zhuan zhuang zhui zhun zhuo zi zong zou zu zuan zui zun zuo'):gmatch('%S+') do PINYIN[w] = true end
 
 local function is_cap(w) return w:match('^[A-Z][a-z]*$') ~= nil end
-local function syllable(w) return PINYIN[w:lower()] == true end
+local function syllable(w) return PINYIN[ascii_lower(w)] == true end
 local function two_syllables(w)
-  w = w:lower()
+  w = ascii_lower(w)
   if PINYIN[w] then return true end
   for i = 1, #w - 1 do
     if PINYIN[w:sub(1, i)] and PINYIN[w:sub(i + 1)] then return true end
@@ -206,7 +211,7 @@ local RAW_FIELDS = { year = true, booktitle = true, holder = true, scale = true,
 local function bib_fields(body, e)
   local pos = 1
   while true do
-    local _, stop, name = body:find('^[%s,]*([%w_%-:.]+)%s*=%s*', pos)
+    local _, stop, name = body:find('^[ \t\r\n,]*([A-Za-z0-9_%-:.]+)[ \t\r\n]*=[ \t\r\n]*', pos)
     if not stop then return end
     pos = stop + 1
     local c, val, raw = body:sub(pos, pos)
@@ -219,11 +224,11 @@ local function bib_fields(body, e)
       if not a then return end
       val = body:sub(a + 1, b - 1); pos = b + 1
     else
-      local a, b = body:find('^[^,}%s]+', pos)
+      local a, b = body:find('^[^,} \t\r\n]+', pos)
       if not a then return end
       val = body:sub(a, b); pos = b + 1
     end
-    name = name:lower()
+    name = ascii_lower(name)
     if RAW_FIELDS[name] then e[name] = val; e[name .. '_braced'] = raw end
   end
 end
@@ -234,7 +239,7 @@ local function bib_scan(meta)
   if pandoc.utils.type(bibs) ~= 'List' then bibs = { bibs } end
   for _, b in ipairs(bibs) do
     local path = pandoc.utils.stringify(b)
-    if path:lower():match('%.bib$') then
+    if path:match('%.[Bb][Ii][Bb]$') then
       local f = io.open(path)
       if not f then
         warning('gbt7714: cannot read ' .. path .. '; entry types and sort keys fall back to pandoc defaults')
@@ -242,9 +247,9 @@ local function bib_scan(meta)
         local text = '\n' .. f:read('a'):gsub('^\239\187\191', '')  -- drop UTF-8 BOM
         f:close()
         for chunk in text:gsub('\n[ \t]*@', '\0@'):gmatch('%z@([^%z]*)') do
-          local t, k, body = chunk:match('^(%w+)%s*{%s*([^,%s]+)%s*,(.*)$')
+          local t, k, body = chunk:match('^([A-Za-z]+)[ \t\r\n]*{[ \t\r\n]*([^, \t\r\n]+)[ \t\r\n]*,(.*)$')
           if t then
-            local e = { type = t:lower() }
+            local e = { type = ascii_lower(t) }
             bib_fields(body, e)
             entries[k] = e
           end
@@ -507,8 +512,8 @@ local LANGID = {
 }
 -- Beyond bst (which maps zh-CN etc. to "other"): BCP 47 codes as Zotero and CSL-JSON write them.
 local function lang_of(id)
-  id = id:lower()
-  return LANGID[id] or ({ zh = 'zh', ja = 'ja', ko = 'ko', en = 'en', ru = 'ru' })[id:match('^(%a%a)[-_]') or id] or 'other'
+  id = ascii_lower(id)
+  return LANGID[id] or ({ zh = 'zh', ja = 'ja', ko = 'ko', en = 'en', ru = 'ru' })[id:match('^([a-z][a-z])[-_]') or id] or 'other'
 end
 
 -- bst set.entry.lang: langid/language field, else detect from the first non-empty field.
@@ -591,7 +596,7 @@ function Pandoc(doc)
     end
     return nil
   end
-  local style = pandoc.utils.stringify(doc.meta.gbt7714 or 'authoryear'):lower()
+  local style = ascii_lower(pandoc.utils.stringify(doc.meta.gbt7714 or 'authoryear'))
   if not STYLES[style] then
     -- Quarto turns error() into a log line and keeps rendering, so stop explicitly.
     io.stderr:write('ERROR: gbt7714: unknown style "', style, '" (use authoryear, numeric or note)\n')
@@ -621,7 +626,7 @@ function Pandoc(doc)
       local raw_v = e[field .. '_braced']
       local journal = field == 'booktitle' and PERIODICAL_TYPES[r.type]  -- container is the journal
       if raw_v and r[var] and not journal and (cjk or raw_v:find('\\quad')) then
-        raw_v = raw_v:gsub('\\quad%s*', '\u{2003}')
+        raw_v = raw_v:gsub('\\quad[ \t\r\n]*', '\u{2003}')
         r[var] = pandoc.utils.blocks_to_inlines(pandoc.read(raw_v, 'latex').blocks)
       end
     end
@@ -630,7 +635,7 @@ function Pandoc(doc)
     -- fields pandoc drops; bst uses holder (patent assignee) in place of the inventors
     if e.holder then
       r.author = {}
-      for h in (e.holder .. ' and '):gmatch('(.-)%s+and%s+') do table.insert(r.author, { literal = h }) end
+      for h in (e.holder .. ' and '):gmatch('(.-)[ \t\r\n]+and[ \t\r\n]+') do table.insert(r.author, { literal = h }) end
     end
     r.scale = r.scale or e.scale
     r.dimensions = r.dimensions or (e.dimensions and e.dimensions:gsub('\\,', '\u{2009}'))
@@ -659,9 +664,9 @@ function Pandoc(doc)
     -- eprint, makes the entry a preprint [PP]; the arXiv id after "arXiv:" becomes the URL.
     if e.type == 'article' then
       local j = e.journal or e.journaltitle
-      if j and j:lower():sub(1, 5) == 'arxiv' then
+      if j and ascii_lower(j):sub(1, 5) == 'arxiv' then
         r.type, r['container-title'] = 'article', nil
-        local _, at = j:lower():find('.*arxiv:')  -- last "arXiv:", as bst scans back from the end
+        local _, at = ascii_lower(j):find('.*arxiv:')  -- last "arXiv:", as bst scans back from the end
         local id = at and j:sub(at + 1):match('^[^ %[]+')
         if id then r.url = 'https://arxiv.org/abs/' .. id end
       elseif not j and (e.eprint or e.archiveprefix or e.eprinttype) then
@@ -673,7 +678,7 @@ function Pandoc(doc)
       -- so drop the one pandoc derives from it
       local src = e.archiveprefix or e.eprinttype
       src = ({ arxiv = 'arXiv', pubmed = 'PubMed' })[src] or src
-      if not src and (e.journal or e.journaltitle or ''):lower():sub(1, 5) == 'arxiv' then src = 'arXiv' end
+      if not src and ascii_lower(e.journal or e.journaltitle or ''):sub(1, 5) == 'arxiv' then src = 'arXiv' end
       r.publisher = r.publisher or src
       if e.eprint and not e.url and r.url and pandoc.utils.stringify(r.url):find(e.eprint, 1, true) then
         r.url = nil
