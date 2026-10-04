@@ -27,10 +27,11 @@ local function sentence_case(title)
   if title == nil or type(title) == 'string' then return title end
   local first = true
   return title:walk({
+    traverse = 'topdown',  -- so a Span is seen (and skipped) before its Strs
     Span = function(sp) first = false; return sp, false end,
     Str = function(s)
-      local t = pandoc.text.lower(s.text)
-      if first then t = pandoc.text.sub(s.text, 1, 1) .. pandoc.text.sub(t, 2); first = false end
+      local t = s.text:lower()  -- ASCII only, like bst change.case$
+      if first then t = s.text:sub(1, 1) .. t:sub(2); first = false end
       return pandoc.Str(t)
     end,
   })
