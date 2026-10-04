@@ -108,10 +108,14 @@
         </if>
       </choose>
     </group>
-    <group delimiter="/" prefix="[" suffix="]">
-      <text macro="entry-type-id" />
-      <text macro="entry-medium-id" />
-    </group>
+    <choose>
+      <if variable="title">
+        <group delimiter="/" prefix="[" suffix="]">
+          <text macro="entry-type-id" />
+          <text macro="entry-medium-id" />
+        </group>
+      </if>
+    </choose>
   </macro>
   
   <macro name="title-en">
@@ -139,10 +143,14 @@
         </if>
       </choose>
     </group>
-    <group delimiter="/" prefix="[" suffix="]">
-      <text macro="entry-type-id-en" />
-      <text macro="entry-medium-id-en" />
-    </group>
+    <choose>
+      <if variable="title">
+        <group delimiter="/" prefix="[" suffix="]">
+          <text macro="entry-type-id-en" />
+          <text macro="entry-medium-id-en" />
+        </group>
+      </if>
+    </choose>
   </macro>
   
   <macro name="volume">
