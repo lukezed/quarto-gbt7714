@@ -998,7 +998,7 @@
       </else>
     </choose>
   </macro>
-  <citation>
+  <citation et-al-min="4" et-al-use-first="3">
     <layout delimiter="；" suffix=".">
       <choose><if variable="language"><group><text macro="note-layout" />
     </group></if><else><group><text macro="note-layout-en" />
