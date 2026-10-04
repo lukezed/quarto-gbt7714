@@ -1,6 +1,7 @@
 -- GB/T 7714—2025 citations for any Quarto/pandoc format.
 -- Metadata: `gbt7714: authoryear | numeric | note` (default authoryear).
--- The CSL branches on the presence of `language`, so we set it on CJK entries only.
+-- The CSL branches on the presence of `language`, so we set it on CJK entries only
+-- (CJK as the bst decides it: langid/language field, else script detection).
 
 local dir = pandoc.path.directory(PANDOC_SCRIPT_FILE)
 local STYLES = { authoryear = true, numeric = true, note = true }
@@ -9,22 +10,6 @@ local STYLES = { authoryear = true, numeric = true, note = true }
 local function has_cjk(v)
   local s = type(v) == 'string' and v or pandoc.utils.stringify(v or '')
   return s:find('[\227-\233][\128-\191][\128-\191]') ~= nil
-end
-
-local function is_cjk(r)
-  -- Explicit langid wins, as in bst `is.lang.cjk` (pandoc keeps it as `language`).
-  local lang = r.language and pandoc.utils.stringify(r.language):lower()
-  if lang and lang ~= '' then
-    return lang:match('^zh') or lang:match('^ja') or lang:match('^ko')
-      or lang == 'chinese' or lang == 'japanese' or lang == 'korean' or false
-  end
-  if has_cjk(r.title) or has_cjk(r['container-title']) then return true end
-  for _, role in ipairs({ 'author', 'editor', 'translator' }) do
-    for _, n in ipairs(r[role] or {}) do
-      if has_cjk(n.family) or has_cjk(n.literal) then return true end
-    end
-  end
-  return false
 end
 
 -- Mirror bst `change.case$ "t"`: lowercase everything except the first character
@@ -190,7 +175,10 @@ local BIBTYPE = {
 -- carry correct types already. Ceiling: values must be {braced} (not "quoted" or bare macros).
 -- Returns key -> { type = biblatex type, <field> = raw value } for fields pandoc drops.
 local RAW_FIELDS = { year = true, booktitle = true, holder = true, scale = true, dimensions = true, cstr = true, eid = true,
-                     archiveprefix = true, eprinttype = true }
+                     archiveprefix = true, eprinttype = true,
+                     -- bst sort key and set.entry.lang
+                     key = true, organization = true, langid = true, language = true, title = true, author = true,
+                     journal = true, journaltitle = true, address = true, location = true, publisher = true }
 
 local function bib_scan(meta)
   local entries, bibs = {}, meta.bibliography
@@ -206,6 +194,12 @@ local function bib_scan(meta)
         local t, k, body = chunk:match('^(%w+)%s*{%s*([^,%s]+)%s*,(.*)$')
         if not t then goto continue end
         local e = { type = t:lower() }
+        for name, val in body:gmatch('([%w_-]+)%s*=%s*"([^"]*)"') do  -- quoted / bare values
+          if RAW_FIELDS[name:lower()] then e[name:lower()] = val end
+        end
+        for name, val in body:gmatch('([%w_-]+)%s*=%s*(%d+)%s*[,}\n]') do
+          if RAW_FIELDS[name:lower()] then e[name:lower()] = val end
+        end
         for name, val in body:gmatch('([%w_-]+)%s*=%s*(%b{})') do
           name = name:lower()
           if RAW_FIELDS[name] then
@@ -274,6 +268,106 @@ local function gbt_cites(doc, refs, note)
   })
 end
 
+-- Raw .bib fields the bst sorts on but pandoc drops or reshapes (key, year, langid, ...).
+-- ponytail: one-field-per-line parse (`name = {value},`); multi-line values keep only line 1,
+-- which is enough for key/year/langid/organization and for script detection.
+-- bst `sortify` = purify$ + lowercase: hyphens/ties/whitespace become spaces,
+-- other ASCII punctuation goes, bytes >= 128 (CJK etc.) stay.
+-- Explicit ASCII classes: %s/%w/lower() follow the C locale and can hit UTF-8 bytes (0x85, 0xA0).
+local function sortify(s)
+  s = s:gsub('[-~ \t\r\n\f\v]', ' '):gsub('[^0-9A-Za-z \128-\255]', '')
+  return (s:gsub('[A-Z]', function(c) return string.char(c:byte() + 32) end))
+end
+
+local function str(v)
+  if v == nil then return '' end
+  return type(v) == 'string' and v or pandoc.utils.stringify(v)
+end
+
+-- bst get.str.lang: the "highest" script among all characters wins.
+local SCRIPT_RANK = { other = 0, en = 1, ru = 2, zh = 3, ja = 4, ko = 5 }
+local function script_of(cp)
+  if cp < 128 then
+    return (cp >= 65 and cp <= 90 or cp >= 97 and cp <= 122) and 'en' or 'other'
+  elseif cp >= 1024 and cp <= 1327 then return 'ru'
+  elseif cp >= 19968 and cp <= 40959 or cp >= 13312 and cp <= 19903 then return 'zh'
+  elseif cp >= 12352 and cp <= 12543 then return 'ja'
+  elseif cp >= 44032 and cp <= 55215 then return 'ko'
+  end
+  return 'other'
+end
+
+local LANGID = {
+  english = 'en', american = 'en', british = 'en', chinese = 'zh',
+  japanese = 'ja', korean = 'ko', russian = 'ru',
+}
+
+-- bst set.entry.lang: langid/language field, else detect from the first non-empty field.
+local function entry_lang(raw, r)
+  local id = raw.langid or raw.language
+  if id and id ~= '' then return LANGID[id:lower()] or 'other' end
+  local text = ''
+  for _, v in ipairs({
+    raw.title or str(r.title), raw.author or '', raw.journal or '', raw.journaltitle or '',
+    raw.booktitle or str(r['container-title']), raw.address or '', raw.location or '',
+    raw.publisher or str(r.publisher),
+  }) do
+    if v ~= '' then text = v; break end
+  end
+  local lang = 'other'
+  for _, cp in utf8.codes(text, true) do
+    local s = script_of(cp)
+    if SCRIPT_RANK[s] > SCRIPT_RANK[lang] then lang = s end
+  end
+  return lang
+end
+
+-- bst sort.format.names with "{vv{ } }{ll{ }}{  ff{ }}{  jj{ }}".
+local function sort_names(names, year)
+  local out
+  for i, n in ipairs(names) do
+    local t = str(n.literal)
+    if t == '' then
+      local von = table.concat({ str(n['dropping-particle']), str(n['non-dropping-particle']) }, ' '):gsub('^ +', ''):gsub(' +$', '')
+      t = (von ~= '' and von .. ' ' or '') .. str(n.family)
+      if str(n.given) ~= '' then t = t .. '  ' .. str(n.given) end
+      if str(n.suffix) ~= '' then t = t .. '  ' .. str(n.suffix) end
+    end
+    if i == 1 then
+      out = sortify(t)
+    else
+      out = out .. '   ' .. ((#names > 2 and i == 2) and ('zz' .. year .. '   ') or '') .. sortify(t)
+    end
+  end
+  return out
+end
+
+-- bst presort / bib.sort.order: language order, then `key` or names, then year, then cite key.
+-- Hex-encoded so citeproc's collation reproduces bibtex's plain byte order
+-- (CJK without `key` sorts by code point, after any pinyin `key`).
+local LANG_ORDER = { zh = 1, ja = 2, en = 3, ru = 4 }
+local function bst_sort_key(raw, r, lang)
+  local year = raw.year or ''
+  local function names(list) return list and #list > 0 and sort_names(list, year) or nil end
+  local who = raw.key
+  if who == nil or who == '' then
+    local anon = lang == 'zh' and 'yi4 ming2' or 'anon'
+    local t = raw.type
+    if t == 'book' or (t == 'inbook' and raw.booktitle) then
+      who = names(r.author) or names(r.editor) or anon
+    elseif t == 'collection' or t == 'proceedings' then
+      who = names(r.editor)
+        or (raw.organization and sortify((raw.organization:gsub('^The ', ''))))
+        or anon
+    else
+      who = names(r.author) or anon
+    end
+  end
+  local s = string.char(64 + (LANG_ORDER[lang] or 5)) .. '    ' .. who .. '    '
+    .. sortify(year) .. '    ' .. r.id
+  return (s:sub(1, 250):gsub('.', function(c) return string.format('%02x', c:byte()) end))
+end
+
 function Pandoc(doc)
   local style = pandoc.utils.stringify(doc.meta.gbt7714 or 'authoryear')
   if not STYLES[style] then
@@ -288,6 +382,14 @@ function Pandoc(doc)
   local raw = bib_scan(doc.meta)
   for _, r in ipairs(refs) do
     local e = raw[r.id] or {}
+    local elang = entry_lang(e, r)  -- bst set.entry.lang
+    -- pandoc drops \quad, which GB/T titles use between title elements (信息与文献\quad 资源描述)
+    -- ponytail: rebuilt via the LaTeX reader, so {braced} protection in such titles is lost
+    if e.title_braced and e.title_braced:find('\\quad') then
+      local t = e.title_braced:gsub('\\quad%s*', '\u{2003}')
+      r.title = pandoc.utils.blocks_to_inlines(pandoc.read(t, 'latex').blocks)
+    end
+    r['gbt-sort'] = bst_sort_key(e, r, elang)
     r.type = BIBTYPE[e.type] or r.type
     -- fields pandoc drops; bst uses holder (patent assignee) in place of the inventors
     if e.holder then
@@ -319,9 +421,8 @@ function Pandoc(doc)
     end
     if r.type == 'article' and not r.publisher then r.publisher = e.archiveprefix or e.eprinttype end
     local lang = r.language and pandoc.utils.stringify(r.language):lower() or ''
-    local cjk = is_cjk(r)
-    local en = not cjk and (lang == '' or lang:match('^en') or lang == 'english'
-      or lang == 'american' or lang == 'british')  -- bst entry.lang = lang.en
+    local cjk = elang == 'zh' or elang == 'ja' or elang == 'ko'  -- bst is.lang.cjk
+    local en = elang == 'en'
     if r.type == 'map' and e.booktitle and not r['container-title'] then  -- map in an atlas
       r['container-title'] = fullwidth_str(en and sentence_case_raw(e.booktitle_braced) or e.booktitle)
     end

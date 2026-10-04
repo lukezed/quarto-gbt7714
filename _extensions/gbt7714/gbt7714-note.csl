@@ -124,7 +124,7 @@
         <text variable="title" />
         <choose>
           <if variable="container-title" type="chapter entry-dictionary entry-encyclopedia paper-conference" match="none">
-            <group delimiter=" ">
+            <group delimiter=" ">
               <text macro="volume-en" />
               <text variable="volume-title" />
             </group>
@@ -927,7 +927,7 @@
         </else-if>
         <else-if type="standard">
           
-          <group delimiter=" ">
+          <group delimiter=" ">
             <text variable="number" />
             <text macro="title-en" />
           </group>

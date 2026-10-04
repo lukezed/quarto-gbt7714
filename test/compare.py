@@ -17,7 +17,7 @@ CJK = r'[\u3000-\u9fff\uff00-\uffef]'
 
 def norm(s):
     s = s.replace('\u2019', "'").replace('\u2013', '--')  # typography only, not a style difference
-    s = re.sub(r'\s+', ' ', s).strip()
+    s = re.sub(r'[ \t\r\n]+', ' ', s).strip()  # not \s: keep em/thin spaces significant
     return re.sub(rf'(?<={CJK}) (?={CJK})', '', s)
 
 def bst(style):
@@ -42,6 +42,9 @@ def bst(style):
         body = re.sub(rf'(?<={CJK})\n(?={CJK})', '', body)
         body = re.sub(r'\\(newblock|allowbreak)\b\s*', '', body)
         body = re.sub(r'\\(url|doi|cstr|natexlab|textit|emph|textbf|mbox|nolinkurl)\{([^{}]*)\}', r'\2', body)
+        # LaTeX typography -> the characters it renders as
+        body = (re.sub(r'\\quad\s*', '\u2003', body).replace('---', '\u2014').replace('$\\times$', '\u00d7')
+                .replace('\\,', '\u2009').replace('``', '\u201c').replace("''", '\u201d'))
         body = body.replace('\\&', '&').replace('\\_', '_').replace('\\%', '%').replace('\\$', '$').replace('~', ' ')
         body = re.sub(r'\\[a-zA-Z]+\s*', '', body).replace('{', '').replace('}', '')
         out.append((key, norm(body)))

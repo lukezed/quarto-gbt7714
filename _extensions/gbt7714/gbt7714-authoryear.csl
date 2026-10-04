@@ -321,7 +321,7 @@
         <text variable="title" />
         <choose>
           <if variable="container-title" type="chapter entry-dictionary entry-encyclopedia paper-conference" match="none">
-            <group delimiter=" ">
+            <group delimiter=" ">
               <text macro="volume-en" />
               <text variable="volume-title" />
             </group>
@@ -1045,7 +1045,7 @@
         </else-if>
         <else-if type="standard">
           
-          <group delimiter=" ">
+          <group delimiter=" ">
             <text variable="number" />
             <text macro="title-en" />
           </group>
@@ -1106,6 +1106,8 @@
   </citation>
   <bibliography entry-spacing="0" et-al-min="4" et-al-use-first="3" hanging-indent="true">
     <sort>
+      <!-- gbt-sort: bst sort key computed by gbt7714.lua -->
+      <key variable="gbt-sort" />
       <key macro="author" />
       <key macro="date-intext" />
     </sort>
