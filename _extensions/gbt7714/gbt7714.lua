@@ -11,12 +11,18 @@ local STYLES = { authoryear = true, numeric = true, note = true }
 -- text may be non-ASCII, and this for case-folding.
 local function ascii_lower(s) return (s:gsub('[A-Z]', string.lower)) end
 
+-- Plain text of a metadata value that may be a string, Inlines or nil.
+local function str(v)
+  if v == nil then return '' end
+  return type(v) == 'string' and v or pandoc.utils.stringify(v)
+end
+
 local function warning(msg)
   if quarto and quarto.log and quarto.log.warning then quarto.log.warning(msg) else io.stderr:write('[WARNING] ', msg, '\n') end
 end
 
 -- The one CJK range (Han incl. Ext A/B+, kana, Hangul, CJK and full-width punctuation).
--- `script_of` below is separate on purpose: it mirrors bst get.str.lang's per-script ranks.
+-- `script_of` is separate on purpose: it mirrors bst get.str.lang's per-script ranks.
 local function is_cjk_cp(cp)
   return cp ~= nil and ((cp >= 0x1100 and cp <= 0x11FF) or (cp >= 0x2E80 and cp <= 0x9FFF)
     or (cp >= 0xA960 and cp <= 0xA97F) or (cp >= 0xAC00 and cp <= 0xD7AF)
@@ -24,9 +30,21 @@ local function is_cjk_cp(cp)
     or (cp >= 0x20000 and cp <= 0x3FFFF))
 end
 
+-- bst get.str.lang: the "highest" script among all characters wins.
+local SCRIPT_RANK = { other = 0, en = 1, ru = 2, zh = 3, ja = 4, ko = 5 }
+local function script_of(cp)
+  if cp < 128 then
+    return (cp >= 65 and cp <= 90 or cp >= 97 and cp <= 122) and 'en' or 'other'
+  elseif cp >= 1024 and cp <= 1327 then return 'ru'
+  elseif cp >= 19968 and cp <= 40959 or cp >= 13312 and cp <= 19903 then return 'zh'
+  elseif cp >= 12352 and cp <= 12543 then return 'ja'
+  elseif cp >= 44032 and cp <= 55215 then return 'ko'
+  end
+  return 'other'
+end
+
 local function has_cjk(v)
-  local s = type(v) == 'string' and v or pandoc.utils.stringify(v or '')
-  for _, cp in utf8.codes(s, true) do
+  for _, cp in utf8.codes(str(v), true) do
     if is_cjk_cp(cp) then return true end
   end
   return false
@@ -72,9 +90,6 @@ local function sentence_case_raw(s)
   end
   return table.concat(out)
 end
-local FW_FIELDS = { 'title', 'container-title', 'collection-title', 'volume-title',
-                    'publisher', 'publisher-place', 'event-title', 'event-place' }
-
 local function fullwidth(x)
   if x == nil or type(x) == 'string' then return x end
   return x:walk({ Inlines = function(ils)
@@ -98,6 +113,9 @@ local function fullwidth(x)
   end })
 end
 
+local FW_FIELDS = { 'title', 'container-title', 'collection-title', 'volume-title',
+                    'publisher', 'publisher-place', 'event-title', 'event-place' }
+
 -- Mirror bst `format.edition`: ordinal words -> numbers, 1st edition omitted; CJK (zh/ja/ko)
 -- get no ordinal suffix; bbl.edition is 版 for zh/ja, изд. for ru, ed. otherwise:
 -- "3 版", "5th ed.", "2 ed." (ko), "3rd изд." (ru, as upstream). Other text (修订版, 新1版) is kept.
@@ -108,7 +126,7 @@ local REVISED = { ['revised edition'] = 'Rev. ed.', ['revised ed.'] = 'Rev. ed.'
 
 local function edition(e, elang)
   if e == nil then return nil end
-  local s = pandoc.utils.stringify(e)
+  local s = str(e)
   local n = s:match('^(%d+)') or WORDNUM[ascii_lower(s)]
   if not n then return REVISED[ascii_lower(s)] or s end
   n = tostring(n)
@@ -174,7 +192,7 @@ local function format_name(n)
   local fam, giv = n.family, n.given
   if has_cjk(fam) then
     if giv and not has_cjk(giv) then n.given = nil end
-  elseif fam:find('[\208-\211]') then  -- Cyrillic
+  elseif fam ~= '' and script_of(utf8.codepoint(fam, 1)) == 'ru' then  -- Cyrillic
     if giv then n.given = giv:gsub('%.', '') end
   elseif giv and not pinyin_name(n) then
     n.given = initials(giv)
@@ -196,8 +214,8 @@ local BIBTYPE = {
   periodical = 'periodical', proceedings = 'paper-conference',
 }
 
--- ponytail: regex scan of .bib files for `@type{key, field = {value}, ...}`; CSL-JSON/YAML bibs
--- carry correct types already. Ceiling: values must be {braced} (not "quoted" or bare macros).
+-- ponytail: pattern scan of .bib files for `@type{key, field = value, ...}`; CSL-JSON/YAML bibs
+-- carry correct types already. Ceiling: no @string expansion or # concatenation (see bib_fields).
 -- Returns key -> { type = biblatex type, <field> = raw value } for fields pandoc drops.
 local RAW_FIELDS = { year = true, booktitle = true, holder = true, scale = true, dimensions = true, cstr = true, eid = true,
                      archiveprefix = true, eprinttype = true,
@@ -263,7 +281,7 @@ end
 -- Citation suffix as bst prints a \citep[post] note: page labels dropped (GB/T pages carry
 -- no "p."), anything else kept as written ("第2章", "chap. 3"). Returns text and whether it is a page.
 local function postnote(suffix)
-  local s = pandoc.utils.stringify(suffix or {}):gsub('\194\160', ' ')  -- pandoc puts nbsp after "pp."
+  local s = str(suffix):gsub('\194\160', ' ')  -- pandoc puts nbsp after "pp."
   -- ASCII whitespace only: Lua's %s can match UTF-8 continuation bytes (0x85, 0xA0; 章 = E7 AB A0)
   s = s:gsub('^[ \t\r\n]*,?[ \t\r\n]*', ''):gsub('[ \t\r\n]*$', '')
   if s == '' then return nil end
@@ -338,6 +356,17 @@ end
 --   [见 @key]       -> numeric: prefix outside the superscript, "见[1]"
 -- Note style: @key -> Author + normal citation, so the note keeps the full entry (citeproc
 -- would move the author list into the prose, and drop the name on "同N" repeats).
+-- Note style keeps citeproc's locator handling but normalizes the suffix: under lang: zh
+-- citeproc only knows "页", so a page becomes a bare number (read as a page locator);
+-- anything else ("第2章") follows a full-width comma.
+local function note_suffix(ct)
+  local post, page = postnote(ct.suffix)
+  if post then
+    ct.suffix = page and pandoc.Inlines({ pandoc.Str(','), pandoc.Space(), pandoc.Str(post) })
+      or pandoc.Inlines({ pandoc.Str('，' .. post) })
+  end
+end
+
 local function gbt_cites(doc, refs, style)
   local note, numeric = style == 'note', style == 'numeric'
   local byid = {}
@@ -350,11 +379,7 @@ local function gbt_cites(doc, refs, style)
     end
     local post, page = postnote(ct.suffix)
     if note then
-      -- under lang: zh citeproc only knows "页"; a bare number is read as a page locator
-      if post then
-        ct.suffix = page and pandoc.Inlines({ pandoc.Str(','), pandoc.Space(), pandoc.Str(post) })
-          or pandoc.Inlines({ pandoc.Str('，' .. post) })
-      end
+      note_suffix(ct)
       out:insert(pandoc.Cite({}, { ct })); return out
     end
     if numeric and #ct.prefix > 0 then
@@ -376,13 +401,7 @@ local function gbt_cites(doc, refs, style)
         local out = pandoc.Inlines(pre); out:insert(pandoc.Cite({}, c.citations)); return out
       end
       if note and #c.citations > 1 then  -- keep one note; only normalize each postnote
-        for _, ct in ipairs(c.citations) do
-          local post, page = postnote(ct.suffix)
-          if post then
-            ct.suffix = page and pandoc.Inlines({ pandoc.Str(','), pandoc.Space(), pandoc.Str(post) })
-              or pandoc.Inlines({ pandoc.Str('，' .. post) })
-          end
-        end
+        for _, ct in ipairs(c.citations) do note_suffix(ct) end
         return c
       end
       local out = pandoc.Inlines({})
@@ -477,33 +496,10 @@ local function run_citeproc(doc, refs, style)
   return doc
 end
 
--- Raw .bib fields the bst sorts on but pandoc drops or reshapes (key, year, langid, ...).
--- ponytail: one-field-per-line parse (`name = {value},`); multi-line values keep only line 1,
--- which is enough for key/year/langid/organization and for script detection.
 -- bst `sortify` = purify$ + lowercase: hyphens/ties/whitespace become spaces,
 -- other ASCII punctuation goes, bytes >= 128 (CJK etc.) stay.
--- Explicit ASCII classes: %s/%w/lower() follow the C locale and can hit UTF-8 bytes (0x85, 0xA0).
 local function sortify(s)
-  s = s:gsub('[-~ \t\r\n\f\v]', ' '):gsub('[^0-9A-Za-z \128-\255]', '')
-  return (s:gsub('[A-Z]', function(c) return string.char(c:byte() + 32) end))
-end
-
-local function str(v)
-  if v == nil then return '' end
-  return type(v) == 'string' and v or pandoc.utils.stringify(v)
-end
-
--- bst get.str.lang: the "highest" script among all characters wins.
-local SCRIPT_RANK = { other = 0, en = 1, ru = 2, zh = 3, ja = 4, ko = 5 }
-local function script_of(cp)
-  if cp < 128 then
-    return (cp >= 65 and cp <= 90 or cp >= 97 and cp <= 122) and 'en' or 'other'
-  elseif cp >= 1024 and cp <= 1327 then return 'ru'
-  elseif cp >= 19968 and cp <= 40959 or cp >= 13312 and cp <= 19903 then return 'zh'
-  elseif cp >= 12352 and cp <= 12543 then return 'ja'
-  elseif cp >= 44032 and cp <= 55215 then return 'ko'
-  end
-  return 'other'
+  return ascii_lower(s:gsub('[-~ \t\r\n\f\v]', ' '):gsub('[^0-9A-Za-z \128-\255]', ''))
 end
 
 local LANGID = {
@@ -641,14 +637,14 @@ function Pandoc(doc)
     r.dimensions = r.dimensions or (e.dimensions and e.dimensions:gsub('\\,', '\u{2009}'))
     if e.cstr then  -- bst format.doi: CSTR replaces DOI, and is omitted when the URL contains it
       r.doi = nil
-      if not (r.url and pandoc.utils.stringify(r.url):find(e.cstr, 1, true)) then r.CSTR = e.cstr end
+      if not (r.url and str(r.url):find(e.cstr, 1, true)) then r.CSTR = e.cstr end
     end
     if not r.page and e.eid then r.page = e.eid end
     if r.type == 'periodical' then
       -- bst `periodical`: no container; volume/year ranges with full-width punctuation and "—"
       r['container-title'] = nil
       if r.volume then
-        r.volume = fullwidth_str(pandoc.utils.stringify(r.volume)):gsub('%-', '—')
+        r.volume = fullwidth_str(str(r.volume)):gsub('%-', '—')
       end
       if e.year and e.year:find('-') then r.issued = { literal = e.year:gsub('%-', '—') } end
     end
@@ -680,7 +676,7 @@ function Pandoc(doc)
       src = ({ arxiv = 'arXiv', pubmed = 'PubMed' })[src] or src
       if not src and ascii_lower(e.journal or e.journaltitle or ''):sub(1, 5) == 'arxiv' then src = 'arXiv' end
       r.publisher = r.publisher or src
-      if e.eprint and not e.url and r.url and pandoc.utils.stringify(r.url):find(e.eprint, 1, true) then
+      if e.eprint and not e.url and r.url and str(r.url):find(e.eprint, 1, true) then
         r.url = nil
       end
     end
@@ -690,7 +686,7 @@ function Pandoc(doc)
     end
     r.edition = edition(r.edition, elang)
     if r.volume and not PERIODICAL_TYPES[r.type] then  -- bst format.bvolume (books, maps, ...)
-      local v = pandoc.utils.stringify(r.volume)
+      local v = str(r.volume)
       if v:match('^%d+$') then
         r.volume = elang == 'ko' and ('제 ' .. v .. ' 권')
           or cjk and ('第 ' .. v .. ' 卷') or ('v.' .. v)
@@ -706,7 +702,7 @@ function Pandoc(doc)
     end
     r['event-title'] = r['event-title'] or r.event
     -- bst format.doi: no DOI when the URL already contains it
-    if r.doi and r.url and pandoc.utils.stringify(r.url):find(pandoc.utils.stringify(r.doi), 1, true) then
+    if r.doi and r.url and str(r.url):find(str(r.doi), 1, true) then
       r.doi = nil
     end
     for _, f in ipairs(FW_FIELDS) do r[f] = fullwidth(r[f]) end
