@@ -92,6 +92,69 @@ local function edition(e, cjk, lang)
   return n .. suf .. ' ed.'
 end
 
+-- Mirror bst `format.name`: names are pre-formatted here and the CSL prints given as-is
+-- (no initialize-with). CJK family: keep given only if it is CJK too. Cyrillic: drop dots.
+-- Latin: full given if it is pinyin (bst CTL_check_pinyin), else initials ("D E", "J-L").
+local PINYIN = {}
+for w in ('a ai an ang ao ba bai ban bang bao bei ben beng bi bian biao bie bin bing bo bu ca cai can cang cao ce cen ceng cha chai chan chang chao che chen cheng chi chong chou chu chuai chuan chuang chui chun chuo ci cong cou cu cuan cui cun cuo da dai dan dang dao de dei deng di dia dian diao die ding diu dong dou du duan dui dun duo e ei en eng er fa fan fang fei fen feng fo fou fu ga gai gan gang gao ge gei gen geng gong gou gu gua guai guan guang gui gun guo ha hai han hang hao he hei hen heng hong hou hu hua huai huan huang hui hun huo ji jia jian jiang jiao jie jin jing jiong jiu ju juan jue jun ka kai kan kang kao ke ken keng kong kou ku kua kuai kuan kuang kui kun kuo la lai lan lang lao le lei leng li lia lian liang liao lie lin ling liu long lou lu luan lun luo lyu lyue ma mai man mang mao me mei men meng mi mian miao mie min ming miu mo mou mu na nai nan nang nao ne nei nen neng ni nian niang niao nie nin ning niu nong nu nuan nuo nyu nyue o ou pa pai pan pang pao pei pen peng pi pian piao pie pin ping po pou pu qi qia qian qiang qiao qie qin qing qiong qiu qu quan que qun ran rang rao re ren reng ri rong rou ru ruan rui run ruo sa sai san sang sao se sen seng sha shai shan shang shao she shei shen sheng shi shou shu shua shuai shuan shuang shui shun shuo si song sou su suan sui sun suo ta tai tan tang tao te teng ti tian tiao tie ting tong tou tu tuan tui tun tuo wa wai wan wang wei wen weng wo wu xi xia xian xiang xiao xie xin xing xiong xiu xu xuan xue xun ya yan yang yao ye yi yin ying yong you yu yuan yue yun za zai zan zang zao ze zei zen zeng zha zhai zhan zhang zhao zhe zhei zhen zheng zhi zhong zhou zhu zhua zhuai zhuan zhuang zhui zhun zhuo zi zong zou zu zuan zui zun zuo'):gmatch('%S+') do PINYIN[w] = true end
+
+local function is_cap(w) return w:match('^[A-Z][a-z]*$') ~= nil end
+local function syllable(w) return PINYIN[w:lower()] == true end
+local function two_syllables(w)
+  w = w:lower()
+  if PINYIN[w] then return true end
+  for i = 1, #w - 1 do
+    if PINYIN[w:sub(1, i)] and PINYIN[w:sub(i + 1)] then return true end
+  end
+  return false
+end
+local function hyphenated(w)
+  local a, b = w:match('^([^-]+)-([^-]+)$')
+  return a ~= nil and is_cap(a) and syllable(a) and is_cap(b) and syllable(b)
+end
+local function pinyin_name(n)
+  local fam, giv = n.family or '', n.given or ''
+  if fam == '' or giv == '' or n['non-dropping-particle'] or n['dropping-particle'] or n.suffix then
+    return false
+  end
+  local fam_ok = fam:find('-') and hyphenated(fam) or (is_cap(fam) and syllable(fam))
+  if not fam_ok then return false end
+  if giv:find('-') then return hyphenated(giv) end
+  giv = giv:gsub('’', "'")
+  local a, b = giv:match("^([^']+)'([^']+)$")
+  if a then return is_cap(a) and syllable(a) and b:match('^[a-z]+$') ~= nil and syllable(b) end
+  return is_cap(giv) and two_syllables(giv)
+end
+
+local NAME_VARS = { 'author', 'editor', 'translator', 'container-author', 'collection-editor',
+                    'composer', 'director', 'illustrator', 'interviewer', 'recipient' }
+
+local function initials(given)
+  local out = {}
+  for word in given:gmatch('%S+') do
+    local parts = {}
+    for part in word:gmatch('[^-]+') do
+      parts[#parts + 1] = part:match('^[%z\1-\127\194-\244][\128-\191]*')
+    end
+    out[#out + 1] = table.concat(parts, '-')
+  end
+  return table.concat(out, ' ')
+end
+
+local function format_name(n)
+  if n.literal or not n.family then return n end
+  local fam, giv = n.family, n.given
+  if has_cjk(fam) then
+    if giv and not has_cjk(giv) then n.given = nil end
+  elseif fam:find('[\208-\211]') then  -- Cyrillic
+    if giv then n.given = giv:gsub('%.', '') end
+  elseif giv and not pinyin_name(n) then
+    n.given = initials(giv)
+  end
+  if n.suffix then n.suffix = n.suffix:gsub('%.', '') end
+  return n
+end
+
 -- biblatex types pandoc maps to an empty or lossy CSL type; the CSL expects these.
 local BIBTYPE = {
   archive = 'collection', map = 'map', preprint = 'article', standard = 'standard',
@@ -140,6 +203,9 @@ function Pandoc(doc)
       r.title = sentence_case(r.title)
     end
     for _, f in ipairs(FW_FIELDS) do r[f] = fullwidth(r[f]) end
+    for _, v in ipairs(NAME_VARS) do
+      if r[v] then for i, n in ipairs(r[v]) do r[v][i] = format_name(n) end end
+    end
   end
   doc.meta.references = refs
   doc.meta.bibliography = nil
