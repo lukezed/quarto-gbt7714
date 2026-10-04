@@ -325,6 +325,8 @@ local function edge_cp(el, last)
 end
 -- A narrative cite opens with the author's name; keep the space before a Latin name
 -- ("英文叙述 Smith et al.（2020）"), as xeCJK puts CJK-Latin glue there in PDF.
+-- Order: needs refs after Pandoc()'s loop (r.language is then 'zh' or nil), and must run
+-- before gbt_cites, which rewrites AuthorInText cites into plain text + SuppressAuthor.
 local function trim_cite_spaces(doc, refs)
   local latin = {}
   for _, r in ipairs(refs) do latin[r.id] = not r.language end
@@ -626,6 +628,7 @@ function Pandoc(doc)
         r[var] = pandoc.utils.blocks_to_inlines(pandoc.read(raw_v, 'latex').blocks)
       end
     end
+    -- before the holder override below: bst sorts patents by inventors, labels them by holder
     r['gbt-sort'] = bst_sort_key(e, r, elang)
     r.type = BIBTYPE[e.type] or r.type
     -- fields pandoc drops; bst uses holder (patent assignee) in place of the inventors
