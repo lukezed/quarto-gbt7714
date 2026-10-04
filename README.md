@@ -7,7 +7,8 @@ GB/T 7714—2025 参考文献格式的 Quarto 版本（顺序编码制 / 著者-
 ## 用法
 
 ```bash
-quarto add lukezed/quarto-gbt7714
+quarto add lukezed/quarto-gbt7714          # 发布到 GitHub 后可用
+quarto add /path/to/quarto-gbt7714         # 目前：从本地克隆安装
 ```
 
 ```yaml
@@ -16,7 +17,7 @@ filters: [gbt7714]
 gbt7714: authoryear   # authoryear（默认）| numeric | note
 ```
 
-- 不需要设置 `lang`：中文条目的"等""佚名"等不依赖文档语言。
+- 文献条目不依赖 `lang`：中文条目的"等""佚名"等在任何文档语言下都正确。但 Quarto 自己生成的标题（"References""Footnotes"、图表标签）跟随 `lang`，中文文档请设 `lang: zh`。
 - 中文条目要按拼音排序，需在 bib 中提供 `key` 字段（如 `key = {wang2 ming2}`），与 upstream bst 相同；没有 `key` 的中文条目按码位排在其后。
 - 注释体例（`note`）：重复引用写"同N"（指向第 N 条注释）；注码放在标点前（"研究¹。"），可用 `notes-after-punctuation: true` 改回；文末同时输出参考文献表，不需要时设 `suppress-bibliography: true`。
 - Word：pandoc 生成 docx 时不读 CSL 的悬挂缩进，文献表格式取决于 reference doc 的 `Bibliography` 样式。可直接用附带的模板（文献表悬挂缩进 2 字；正文宋体、标题黑体，西文 Times New Roman）：
@@ -27,8 +28,18 @@ gbt7714: authoryear   # authoryear（默认）| numeric | note
       reference-doc: _extensions/gbt7714/gbt7714-reference.docx
   ```
 
-  已有自己模板的，在 Word 里把 `Bibliography` 样式设为悬挂缩进即可。模板由 `tools/make_reference_docx.py` 生成。
+  路径相对于写这一行的文件：写在项目根的 `_quarto.yml` 里如上；写在子目录 qmd 的 front matter 里要相应加 `../`。已有自己模板的，在 Word 里把 `Bibliography` 样式设为悬挂缩进即可。模板由 `tools/make_reference_docx.py` 生成。
 - 正文页码写 `[@key, 42]`、`[@key, p. 42]` 或 `[@key, 第42页]`，输出为上标页码（`[1]⁴²`、`（Boobier，2020）⁴²`）。
+
+## 适用范围与限制
+
+- **只作用于 citeproc**。`cite-method: natbib` / `biblatex` 时 filter 不做任何事，PDF 交给 LaTeX（可直接用 upstream 的 `gbt7714` 宏包）。
+- **Typst**：Quarto 的 typst 默认用 Typst 原生引用，不经过 CSL filter；要用本格式，在 `format: typst` 下设 `citeproc: true`（filter 会给出提示）。
+- **Quarto book（HTML）**：Quarto 每章单独跑 citeproc，references 页由 Quarto 另起一个不带 filter 的 pandoc 生成，extension 无法介入。因此：
+  - book 的 **PDF / docx** 完全正常（全书一次 citeproc，numeric 编号跨章连续）；
+  - book 的 **HTML** 请不要放 `::: {#refs}` 参考文献页，改为每章末尾显示本章文献（格式正确；numeric 编号章内连续）；
+  - 单文档、website 不受影响。
+- 只扫描 `.bib` 文件补字段；CSL-JSON / YAML 文献库可用，但 bib 专有字段（`key`、`langid` 等）自然没有。
 
 ## 工作原理
 
