@@ -63,6 +63,14 @@ python3 test/compare.py authoryear   # 或 numeric / cite-authoryear / cite-nume
 - [ ] 丛书名 + 卷 + 书名的片段示例 `中国科学技术史：第二卷 科学思想史`（1 条）
 - [ ] 同姓不同名作者的正文引文消歧（filter 自拼的作者名）
 
+## 数据规范
+
+与 upstream bst 相同，以下写法不会被纠正，请在 bib 中改好：
+
+- 多位作者只能用 ` and ` 分隔：`author = {张三 and 李四}`。知网等导出的 `张三,李四`、`王五;赵六` 会被当成一个作者。
+- 页码范围用 `-` 或 `--`：`pages = {45--67}`。`45~67` 中的 `~` 是 TeX 的不换行空格，会输出成"45 67"。
+- 语言优先看 `langid`/`language`（`chinese`、`zh`、`zh-CN` 等均视为中文；`zh-CN` 这类代码 upstream 视为其他语言，此处按中文处理），没有时按第一个非空字段的文字判断。
+
 ## License
 
 - CSL 文件：CC BY-SA 3.0（派生自 zotero-chinese/styles）
