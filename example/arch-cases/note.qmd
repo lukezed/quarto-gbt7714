@@ -1,0 +1,9 @@
+---
+title: note
+lang: zh
+bibliography: refs.bib
+filters: [gbt7714]
+gbt7714: note
+---
+
+{{< include _body.qmd >}}

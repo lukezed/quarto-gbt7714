@@ -1,0 +1,9 @@
+---
+title: numeric
+lang: zh
+bibliography: refs.bib
+filters: [gbt7714]
+gbt7714: numeric
+---
+
+{{< include _body.qmd >}}
