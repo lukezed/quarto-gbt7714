@@ -782,6 +782,14 @@ function Pandoc(doc)
   doc.meta.bibliography = nil
   doc = trim_cite_spaces(doc, refs)
   if own_csl then return doc end
+  if style == 'note' then  -- `Lareau [-@x]`: the author is in the prose, but the note needs the full entry
+    doc = doc:walk({ Cite = function(c)
+      for _, ct in ipairs(c.citations) do
+        if ct.mode == 'SuppressAuthor' then ct.mode = 'NormalCitation' end
+      end
+      return c
+    end })
+  end
   doc = gbt_cites(doc, refs, style)
   doc = run_citeproc(doc, refs, style)
   return doc
