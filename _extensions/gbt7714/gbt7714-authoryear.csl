@@ -1087,10 +1087,6 @@
     </group>
   </macro>
   <citation et-al-min="2" et-al-use-first="1" disambiguate-add-givenname="true" disambiguate-add-year-suffix="true" collapse="year-suffix" cite-group-delimiter="，" year-suffix-delimiter="，" after-collapse-delimiter="；">
-    <sort>
-      <key macro="author-intext-en" />
-      <key macro="date-intext" />
-    </sort>
     <layout prefix="（" suffix="）" delimiter="；">
       <choose><if variable="language"><group><group delimiter="，">
         <text macro="author-intext-zh" />
