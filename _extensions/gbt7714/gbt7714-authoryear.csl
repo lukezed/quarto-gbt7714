@@ -745,7 +745,7 @@
             <text variable="page" />
           </group>
           <choose>
-            <if type="collection">
+            <if type="collection manuscript personal_communication" match="any">
               <!-- bst archive: full date after the publisher, also in author-year -->
               <text macro="date" />
             </if>
@@ -795,7 +795,7 @@
             <text variable="page" />
           </group>
           <choose>
-            <if type="collection">
+            <if type="collection manuscript personal_communication" match="any">
               <!-- bst archive: full date after the publisher, also in author-year -->
               <text macro="date-en" />
             </if>
