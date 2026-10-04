@@ -237,6 +237,46 @@ local function intext_author(r)
   return name
 end
 
+-- Chinese text takes no space around a citation ("再生产 [@a] 认为" -> "再生产[@a]认为").
+-- xeCJK drops such spaces in PDF; HTML and Word would keep them, so drop them here.
+local function is_cjk_cp(cp)
+  return cp and ((cp >= 0x3000 and cp <= 0x9FFF) or (cp >= 0xFF00 and cp <= 0xFFEF))
+end
+local function edge_cp(el, last)
+  if not el or el.t ~= 'Str' then return nil end
+  local cp
+  for _, c in utf8.codes(el.text) do
+    cp = c
+    if not last then break end
+  end
+  return cp
+end
+-- A narrative cite opens with the author's name; keep the space before a Latin name
+-- ("英文叙述 Smith et al.（2020）"), as xeCJK puts CJK-Latin glue there in PDF.
+local function trim_cite_spaces(doc, refs)
+  local latin = {}
+  for _, r in ipairs(refs) do latin[r.id] = not r.language end
+  local function opens_latin(c)
+    local ct = c.citations[1]
+    return ct and ct.mode == 'AuthorInText' and latin[ct.id]
+  end
+  return doc:walk({
+    Inlines = function(ils)
+      local out = pandoc.Inlines({})
+      for i, el in ipairs(ils) do
+        local drop = false
+        if el.t == 'Space' then
+          local prev, nxt = ils[i - 1], ils[i + 1]
+          drop = (nxt and nxt.t == 'Cite' and not opens_latin(nxt) and is_cjk_cp(edge_cp(prev, true)))
+              or (prev and prev.t == 'Cite' and is_cjk_cp(edge_cp(nxt, false)))
+        end
+        if not drop then out:insert(el) end
+      end
+      return out
+    end,
+  })
+end
+
 -- GB/T 7714 citation forms the CSL cannot express (bst \citet and locator placement):
 --   @key          -> Author + citation with author suppressed: "Boobier（2020）", "Boobier[1]"
 --   [@key, 42]    -> page as a superscript after the closing bracket: "（Boobier，2020）⁴²", "[1]⁴²"
@@ -459,6 +499,7 @@ function Pandoc(doc)
   end
   doc.meta.references = refs
   doc.meta.bibliography = nil
+  doc = trim_cite_spaces(doc, refs)
   doc = gbt_cites(doc, refs, style == 'note')
   return doc
 end

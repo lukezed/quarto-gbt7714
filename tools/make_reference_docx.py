@@ -1,7 +1,7 @@
 """Build _extensions/gbt7714/gbt7714-reference.docx from pandoc's default reference.docx.
 
 Changes: Bibliography style gets a hanging indent (pandoc's docx writer ignores the CSL
-hanging-indent setting), and body text defaults to Times New Roman + 宋体.
+hanging-indent setting), body text defaults to Times New Roman + 宋体, headings to 黑体.
 Usage: python3 tools/make_reference_docx.py
 """
 import os, re, subprocess, tempfile, zipfile
@@ -22,6 +22,11 @@ styles = re.sub(r'(<w:style w:type="paragraph" w:styleId="Bibliography">.*?)<w:p
 styles = styles.replace(
     '<w:rFonts w:asciiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia" w:hAnsiTheme="minorHAnsi" w:cstheme="minorBidi" />',
     '<w:rFonts w:ascii="Times New Roman" w:eastAsia="宋体" w:hAnsi="Times New Roman" w:cstheme="minorBidi" />', 1)
+# headings and title: 黑体 + Times New Roman instead of the theme's 等线 Light / Aptos Display
+styles = re.sub(r'<w:rFonts\s+w:asciiTheme="majorHAnsi"\s+w:eastAsiaTheme="majorEastAsia"\s+w:hAnsiTheme="majorHAnsi"',
+                '<w:rFonts w:ascii="Times New Roman" w:eastAsia="黑体" w:hAnsi="Times New Roman"', styles)
+styles = re.sub(r'<w:rFonts\s+w:eastAsiaTheme="majorEastAsia"', '<w:rFonts w:eastAsia="黑体"', styles)
+assert 'majorEastAsia' not in styles
 assert 'w:hanging="480"' in styles and 'w:eastAsia="宋体"' in styles
 files['word/styles.xml'] = styles.encode('utf-8')
 
