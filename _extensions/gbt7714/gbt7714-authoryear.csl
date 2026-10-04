@@ -172,12 +172,22 @@
         <text variable="year-suffix" />
       </else-if>
       <else-if variable="accessed">
-        <group prefix="[" suffix="]">
-          <date variable="accessed">
-            <date-part name="year" range-delimiter="-" />
-          </date>
-          <text variable="year-suffix" />
-        </group>
+        <choose>
+          <if variable="gbt-inferred-year">
+            <group suffix="]">
+              <text variable="gbt-inferred-year" />
+              <text variable="year-suffix" />
+            </group>
+          </if>
+          <else>
+            <group prefix="[" suffix="]">
+              <date variable="accessed">
+                <date-part name="year" range-delimiter="-" />
+              </date>
+              <text variable="year-suffix" />
+            </group>
+          </else>
+        </choose>
       </else-if>
       <else>
         <group delimiter="-">
@@ -225,12 +235,22 @@
         <text variable="year-suffix" />
       </else-if>
       <else-if variable="accessed">
-        <group prefix="[" suffix="]">
-          <date variable="accessed">
-            <date-part name="year" range-delimiter="-" />
-          </date>
-          <text variable="year-suffix" />
-        </group>
+        <choose>
+          <if variable="gbt-inferred-year">
+            <group suffix="]">
+              <text variable="gbt-inferred-year" />
+              <text variable="year-suffix" />
+            </group>
+          </if>
+          <else>
+            <group prefix="[" suffix="]">
+              <date variable="accessed">
+                <date-part name="year" range-delimiter="-" />
+              </date>
+              <text variable="year-suffix" />
+            </group>
+          </else>
+        </choose>
       </else-if>
       <else>
         <group delimiter="-">

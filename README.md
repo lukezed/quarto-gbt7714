@@ -2,18 +2,36 @@
 
 **为中文学术写作的 Quarto 模板提供可复用的 GB/T 7714—2025 引用与参考文献接口。** 如果你正在维护某个学校的学位论文模板，或将现有 LaTeX 模板接入 Quarto，可以复用这里的 Lua filter 和 CSL，在自己的封面、章节与排版配置中加入中文引用支持。
 
-本库也附带单栏稿件、双栏文章和课程作业示例，可以直接开始写作，输出 Word、PDF 或 HTML。
+在你的模板项目根目录安装：
 
-## 为什么做这个项目
+```bash
+quarto add lukezed/quarto-gbt7714
+```
 
-灵感来自 [apaquarto](https://github.com/wjschne/apaquarto)：希望中文学术写作也能方便地接入 Quarto。这里把引用处理做成独立扩展，让不同学校和期刊的模板能够复用，并提供完整写作示例作为接入起点。
+在 `_quarto.yml` 中加入：
 
-引用实现参考 [gbt7714-bibtex-style](https://github.com/zepinglee/gbt7714-bibtex-style)，CSL 源自 [zotero-chinese/styles](https://github.com/zotero-chinese/styles)。
+```yaml
+lang: zh
+bibliography: references.bib
+filters: [gbt7714]
+gbt7714: authoryear  # 也支持 numeric、note
+```
 
-## 如何使用
+现有封面、章节和排版配置继续由你的模板管理。[完整接入说明](docs/citations.md)
 
-- **维护学校或期刊模板**：接入 `gbt7714` 引用扩展，保留自己的版式。配置见[模板适配指南](docs/citations.md)。
-- **直接写作**：使用 `gbt7714-paper` 附带的单栏或双栏模板，按实际提交要求调整。配置见[写作指南](docs/writing.md)。
+## 为什么使用这个扩展
+
+[Zeping Lee 的 gbt7714-bibtex-style](https://github.com/zepinglee/gbt7714-bibtex-style) 提供 LaTeX／BibTeX 引用方案。如果模板只输出 LaTeX PDF，已经使用它就可以继续沿用。
+
+本库面向 **Quarto 模板需要复用原生引用流程，或同时输出 Word、HTML、PDF** 的场景：
+
+- 通过 `quarto add` 安装，以 Lua filter 和 CSL 接入 Pandoc citeproc。
+- 同一套 `.qmd` 引文和文献库可用于多种输出，无需分别维护 BibTeX 与 Word／HTML 的引用配置。
+- 默认引用流程不调用上游 `.bst` 或 BibTeX；Word、HTML 不需要 TeX 环境，PDF 排版仍需要。
+
+本库的规则和测试参考上游 BibTeX 实现，CSL 派生自 [zotero-chinese/styles](https://github.com/zotero-chinese/styles)。它们是这个项目的基础；这里补的是 Quarto 接口与多格式适配。已有 `natbib`／`biblatex` 配置需切换到 citeproc 才会使用本扩展，详见[适配指南](docs/citations.md)。
+
+灵感来自 [apaquarto](https://github.com/wjschne/apaquarto)：希望中文学术写作也能方便地接入 Quarto。本库还附带可直接使用的单栏稿件、双栏文章和课程作业模板，作为写作起点与接入示例。
 
 ## 当前状态与反馈
 
@@ -23,7 +41,7 @@
 
 欢迎大家试用，并通过 [Issues](https://github.com/lukezed/quarto-gbt7714/issues) 告诉我遇到的问题。长文档、复杂文献库、不同模板和投稿流程中，很多问题只有真正重度使用后才会出现。反馈时最好附上最小可复现的 `.qmd`、相关 `.bib` 条目、输出格式、Quarto 版本，以及预期与实际结果的截图。
 
-当前已在 Quarto 1.10.18／Pandoc 3.10 环境验证三套模板的 Word、PDF、HTML 渲染与匿名输出；引用结果也有逐条对照测试。[使用限制](docs/citations.md#适用范围与限制)与[已知差异](docs/development.md#已知差异todo)见文档。
+当前已在 Quarto 1.10.18／Pandoc 3.10 环境验证三套模板的 Word、PDF、HTML 渲染与匿名输出；引用结果也有逐条对照测试。[使用限制](docs/citations.md#适用范围与限制)与[已知差异](docs/development.md#已知差异)见文档。
 
 ## 示例与预览
 
@@ -67,20 +85,7 @@
 
 </details>
 
-## 快速开始
-
-### 接入现有模板
-
-运行 `quarto add lukezed/quarto-gbt7714`，再添加：
-
-```yaml
-lang: zh
-bibliography: refs.bib
-filters: [gbt7714]
-gbt7714: authoryear  # 也支持 numeric、note
-```
-
-### 直接使用写作模板
+## 直接使用写作模板
 
 安装 [Quarto](https://quarto.org/docs/get-started/) 与 Python 3。PDF 另需含 `ctex` 和 Fandol 字体的 TeX Live／TinyTeX。
 

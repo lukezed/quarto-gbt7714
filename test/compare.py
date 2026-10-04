@@ -187,7 +187,8 @@ def entries_main(style, verbose):
         c = note_cites([k for k, _ in b])
     else:
         c = csl(style)
-    if style != 'authoryear':  # numbered styles: strip labels, compare text
+    if style in ('numeric', 'note'):  # bibliographies have labels; first-citation notes do not
+        # A bare date such as [1936] is note content, not a bibliography number.
         c = [(k, re.sub(r'^\[\d+\]\s*', '', v)) for k, v in c]
     bd, cd = dict(b), dict(c)
     same = [k for k in bd if cd.get(k) == bd[k]]

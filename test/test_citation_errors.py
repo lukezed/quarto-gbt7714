@@ -1,7 +1,7 @@
 """Targeted regressions for prose authors, custom CSL warnings and bibliography errors.
 Usage: python3 test/test_citation_errors.py
 """
-import os, shutil, subprocess, tempfile
+import html, os, re, shutil, subprocess, tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 EXT = os.path.join(HERE, '..', '_extensions', 'gbt7714')
@@ -25,13 +25,15 @@ with tempfile.TemporaryDirectory() as d:
     # suppress-author syntax attaches the year to the author already written in the prose.
     for md, expected in [('Lareau [-@x].', 'Lareau<span'),
                          ('Lareau\n[-@x].', 'Lareau<span'),
-                         ('英文叙述 @x。', '英文叙述 Lareau<span'),
                          ('See [@x].', 'See <span'),
                          ('Lareau [-@x, 42].', 'Lareau<span'),
                          ('See [compare -@x].', 'See <span')]:
         r = render(md, d)
         assert r.returncode == 0, r.stderr
         assert expected in r.stdout, (md, r.stdout)
+    r = render('英文叙述 @x。', d)
+    assert r.returncode == 0, r.stderr
+    assert html.unescape(re.sub(r'<[^>]+>', '', r.stdout)).strip() == '英文叙述 Lareau（2011）。', r.stdout
     r = render('Lareau [-@x].', d, 'authoryear', 'link-citations=true', 'suppress-bibliography=false')
     assert r.returncode == 0, r.stderr
     assert 'Lareau<span' in r.stdout and 'href="#ref-x"' in r.stdout, r.stdout

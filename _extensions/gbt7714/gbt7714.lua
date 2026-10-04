@@ -364,7 +364,7 @@ local function trim_cite_spaces(doc, refs, style)
 end
 
 -- GB/T 7714 citation forms the CSL cannot express (bst \citet and \citep[post] placement):
---   @key            -> Author + citation with author suppressed: "Boobier（2020）", "Boobier[1]"
+--   @key            -> numeric/note prose author; authoryear retains citeproc's name selection
 --   [@key, 42]      -> postnote as a superscript after the closing bracket: "（Boobier，2020）⁴²", "[1]⁴²"
 --   [@a, 5; @b, 7]  -> one citation each, as bst would print \citep[5]{a}\citep[7]{b}
 --   [见 @key]       -> numeric: prefix outside the superscript, "见[1]"
@@ -387,7 +387,7 @@ local function gbt_cites(doc, refs, style)
   for _, r in ipairs(refs) do byid[r.id] = r end
   local function one(ct)
     local out = pandoc.Inlines({})
-    if ct.mode == 'AuthorInText' then
+    if ct.mode == 'AuthorInText' and style ~= 'authoryear' then
       local a = intext_author(byid[ct.id])
       if a then out:insert(pandoc.Str(a)); ct.mode = note and 'NormalCitation' or 'SuppressAuthor' end
     end
@@ -407,12 +407,12 @@ local function gbt_cites(doc, refs, style)
   return doc:walk({
     Cite = function(c)
       -- A narrative citation can contain several references: @a [see also @b].
-      -- Pull its author into the prose before keeping/splitting the cluster, so
-      -- numeric retains the author and note keeps it in the full first note too.
+      -- Pull numeric/note authors into the prose before keeping/splitting the cluster.
+      -- Authoryear keeps AuthorInText so citeproc applies its name disambiguation.
       local narrative = pandoc.Inlines({})
       if #c.citations > 1 then
         for _, ct in ipairs(c.citations) do
-          if ct.mode == 'AuthorInText' then
+          if ct.mode == 'AuthorInText' and style ~= 'authoryear' then
             local a = intext_author(byid[ct.id])
             if a then
               narrative:insert(pandoc.Str(a))
@@ -568,6 +568,18 @@ local function run_citeproc(doc, refs, style)
         end,
         Inlines = drop_prefix_spaces,
       })
+      -- Let citeproc choose narrative names in the same disambiguation context as
+      -- parenthetical citations. Its author/year separator is a Space; Chinese
+      -- full-width parentheses attach directly to the prose author.
+      if style == 'authoryear' and c.citations[1]
+          and c.citations[1].mode == 'AuthorInText' then
+        for i = 2, #content do
+          if content[i - 1].t == 'Space' and edge_cp(content[i], false) == 0xFF08 then
+            content:remove(i - 1)
+            break
+          end
+        end
+      end
       if not html then return content end
       return pandoc.Span(content, { class = 'citation', ['data-cites'] = table.concat(ids, ' ') })
     end,
@@ -806,7 +818,24 @@ function Pandoc(doc)
       if en and r.type ~= 'periodical' then r.title = sentence_case(r.title) end
       if en and BOOKTITLE_TYPES[r.type] then r['container-title'] = sentence_case(r['container-title']) end
     end
+    -- bst format.btitle: a named series plus volume precedes the volume's title.
+    -- Use the CSL title/volume/volume-title structure, preserving rich title inlines.
+    if (r.type == 'book' or r.type == 'classic' or r.type == 'map')
+      and r['collection-title'] and r.volume and r.title
+      and not r['container-title'] and not r['volume-title'] then
+      r['volume-title'], r.title = r.title, r['collection-title']
+      r['collection-title'] = nil
+    end
     r['event-title'] = r['event-title'] or r.event
+    -- Citeproc ignores CSL affixes when checking ambiguity. Put the opening
+    -- bracket in the inferred-year value so [2025] and published 2025 form
+    -- separate suffix groups; CSL closes the bracket after the year suffix.
+    -- Keep accessed intact for the full retrieval date elsewhere in the entry.
+    local accessed = r.accessed and r.accessed['date-parts']
+    if not own_csl and style == 'authoryear' and not r.issued
+      and accessed and accessed[1] and accessed[1][1] then
+      r['gbt-inferred-year'] = '[' .. tostring(accessed[1][1])
+    end
     -- bst format.doi: no DOI when the URL already contains it
     if r.doi and r.url and str(r.url):find(str(r.doi), 1, true) then
       r.doi = nil
