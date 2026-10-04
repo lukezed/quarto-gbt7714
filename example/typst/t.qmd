@@ -1,0 +1,12 @@
+---
+title: typst
+bibliography: refs.bib
+filters: [gbt7714]
+gbt7714: numeric
+format:
+  typst:
+    citeproc: true   # Typst cites natively otherwise
+---
+英文 [@knuth1984]，中文 [@zhang2019]，叙述 @wang2015，页码 [@smith2020, 42]。
+
+# 参考文献

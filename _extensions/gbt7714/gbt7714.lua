@@ -6,6 +6,10 @@
 local dir = pandoc.path.directory(PANDOC_SCRIPT_FILE)
 local STYLES = { authoryear = true, numeric = true, note = true }
 
+local function warning(msg)
+  if quarto and quarto.log and quarto.log.warning then quarto.log.warning(msg) else io.stderr:write('[WARNING] ', msg, '\n') end
+end
+
 -- ponytail: CJK = UTF-8 lead bytes E3-E9 (U+3000-U+9FFF, incl. kana); misses rare Ext-B names.
 local function has_cjk(v)
   local s = type(v) == 'string' and v or pandoc.utils.stringify(v or '')
@@ -410,8 +414,16 @@ local function bst_sort_key(raw, r, lang)
 end
 
 function Pandoc(doc)
-  -- natbib/biblatex (cite-method) hand citations to LaTeX: leave the document alone.
-  if PANDOC_WRITER_OPTIONS.cite_method ~= 'citeproc' then return nil end
+  -- Only citeproc runs our CSL. natbib/biblatex (cite-method) and Typst's native citations
+  -- (Quarto's typst default; quarto.doc.cite_method() is nil there) are left alone.
+  local method = PANDOC_WRITER_OPTIONS.cite_method
+  if quarto and quarto.doc and quarto.doc.cite_method then method = quarto.doc.cite_method() end
+  if method ~= 'citeproc' then
+    if FORMAT == 'typst' then
+      warning('gbt7714: Typst renders citations natively; set `citeproc: true` under `format: typst` to use GB/T 7714')
+    end
+    return nil
+  end
   local style = pandoc.utils.stringify(doc.meta.gbt7714 or 'authoryear')
   if not STYLES[style] then
     error('gbt7714: unknown style "' .. style .. '" (use authoryear, numeric or note)')
