@@ -245,7 +245,9 @@ end
 -- GB/T 7714 citation forms the CSL cannot express (bst \citet and locator placement):
 --   @key          -> Author + citation with author suppressed: "Boobier（2020）", "Boobier[1]"
 --   [@key, 42]    -> page as a superscript after the closing bracket: "（Boobier，2020）⁴²", "[1]⁴²"
-local function gbt_cites(doc, refs)
+-- Note style: @key -> Author + normal citation, so the note keeps the full entry (citeproc
+-- would move the author list into the prose, and drop the name on "同N" repeats).
+local function gbt_cites(doc, refs, note)
   local byid = {}
   for _, r in ipairs(refs) do byid[r.id] = r end
   return doc:walk({
@@ -255,9 +257,14 @@ local function gbt_cites(doc, refs)
       local out = pandoc.Inlines({})
       if ct.mode == 'AuthorInText' then
         local a = intext_author(byid[ct.id])
-        if a then out:insert(pandoc.Str(a)); ct.mode = 'SuppressAuthor' end
+        if a then out:insert(pandoc.Str(a)); ct.mode = note and 'NormalCitation' or 'SuppressAuthor' end
       end
       local loc = page_locator(ct.suffix)
+      if note then
+        -- under lang: zh citeproc only knows "页"; a bare number is read as a page locator
+        if loc then ct.suffix = pandoc.Inlines({ pandoc.Str(','), pandoc.Space(), pandoc.Str(loc) }) end
+        c.citations = { ct }; out:insert(c); return out
+      end
       if loc then ct.suffix = pandoc.Inlines({}) end
       c.citations = { ct }
       out:insert(c)
@@ -346,6 +353,6 @@ function Pandoc(doc)
   end
   doc.meta.references = refs
   doc.meta.bibliography = nil
-  if style ~= 'note' then doc = gbt_cites(doc, refs) end
+  doc = gbt_cites(doc, refs, style == 'note')
   return doc
 end
