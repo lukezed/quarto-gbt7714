@@ -14,3 +14,7 @@ example/typst/*.pdf
 example/typst/*.typ
 example/book/_book/
 example/book/.quarto/
+
+# data-cases renders
+example/data-cases/*.html
+example/data-cases/*_files/

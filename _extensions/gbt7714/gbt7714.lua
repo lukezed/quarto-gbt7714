@@ -10,10 +10,21 @@ local function warning(msg)
   if quarto and quarto.log and quarto.log.warning then quarto.log.warning(msg) else io.stderr:write('[WARNING] ', msg, '\n') end
 end
 
--- ponytail: CJK = UTF-8 lead bytes E3-E9 (U+3000-U+9FFF, incl. kana); misses rare Ext-B names.
+-- The one CJK range (Han incl. Ext A/B+, kana, Hangul, CJK and full-width punctuation).
+-- `script_of` below is separate on purpose: it mirrors bst get.str.lang's per-script ranks.
+local function is_cjk_cp(cp)
+  return cp ~= nil and ((cp >= 0x1100 and cp <= 0x11FF) or (cp >= 0x2E80 and cp <= 0x9FFF)
+    or (cp >= 0xA960 and cp <= 0xA97F) or (cp >= 0xAC00 and cp <= 0xD7AF)
+    or (cp >= 0xF900 and cp <= 0xFAFF) or (cp >= 0xFF00 and cp <= 0xFFEF)
+    or (cp >= 0x20000 and cp <= 0x3FFFF))
+end
+
 local function has_cjk(v)
   local s = type(v) == 'string' and v or pandoc.utils.stringify(v or '')
-  return s:find('[\227-\233][\128-\191][\128-\191]') ~= nil
+  for _, cp in utf8.codes(s, true) do
+    if is_cjk_cp(cp) then return true end
+  end
+  return false
 end
 
 -- Mirror bst `change.case$ "t"`: lowercase everything except the first character
@@ -36,12 +47,16 @@ end
 -- ", " ": " "; " -> ，：；  "!" "?" -> ！？  "(" ")" -> （）, dropping the adjacent space.
 local FW_TRAIL = { [','] = '，', [':'] = '：', [';'] = '；' }
 
+-- Two forms of one rule: fullwidth_str for plain strings (literal names, volumes, raw bib
+-- values), fullwidth (below) for pandoc Inlines, where spaces are separate elements.
 local function fullwidth_str(s)
   return (s:gsub(', ', '，'):gsub(': ', '：'):gsub('; ', '；'):gsub('!', '！'):gsub('%?', '？')
     :gsub(' ?%(', '（'):gsub('%) ?', '）'))
 end
 
 -- bst change.case$ "t" on a raw bib string: lowercase ASCII outside {braces}, keep the first char.
+-- Kept apart from sentence_case: it serves raw values pandoc never parsed (an atlas booktitle on
+-- @map), where only the raw braces still mark protected text.
 local function sentence_case_raw(s)
   local depth, out = 0, {}
   for i = 1, #s do
@@ -78,24 +93,25 @@ local function fullwidth(x)
   end })
 end
 
--- Mirror bst `format.edition`: ordinal words -> numbers, 1st edition omitted,
--- then "3 版" / "5th ed." / "5 изд."; other text (修订版, 新1版) is kept.
+-- Mirror bst `format.edition`: ordinal words -> numbers, 1st edition omitted; CJK (zh/ja/ko)
+-- get no ordinal suffix; bbl.edition is 版 for zh/ja, изд. for ru, ed. otherwise:
+-- "3 版", "5th ed.", "2 ed." (ko), "3rd изд." (ru, as upstream). Other text (修订版, 新1版) is kept.
 local WORDNUM = { first = 1, second = 2, third = 3, fourth = 4, fifth = 5,
                   sixth = 6, seventh = 7, eighth = 8, ninth = 9, tenth = 10 }
 local REVISED = { ['revised edition'] = 'Rev. ed.', ['revised ed.'] = 'Rev. ed.',
                   revised = 'Rev. ed.', ['rev.'] = 'Rev. ed.', ['修订'] = '修订版' }
 
-local function edition(e, cjk, lang)
+local function edition(e, elang)
   if e == nil then return nil end
   local s = pandoc.utils.stringify(e)
   local n = s:match('^(%d+)') or WORDNUM[s:lower()]
   if not n then return REVISED[s:lower()] or s end
   n = tostring(n)
   if n == '1' then return nil end
-  if cjk then return n .. ' 版' end
-  if lang:match('^ru') then return n .. ' изд.' end
+  local term = (elang == 'zh' or elang == 'ja') and '版' or elang == 'ru' and 'изд.' or 'ed.'
+  if elang == 'zh' or elang == 'ja' or elang == 'ko' then return n .. ' ' .. term end
   local suf = (n:sub(-2, -2) == '1' and 'th') or ({ ['1'] = 'st', ['2'] = 'nd', ['3'] = 'rd' })[n:sub(-1)] or 'th'
-  return n .. suf .. ' ed.'
+  return n .. suf .. ' ' .. term
 end
 
 -- Mirror bst `format.name`: names are pre-formatted here and the CSL prints given as-is
@@ -137,7 +153,7 @@ local NAME_VARS = { 'author', 'editor', 'translator', 'container-author', 'colle
 
 local function initials(given)
   local out = {}
-  for word in given:gmatch('%S+') do
+  for word in given:gmatch('[^ \t\r\n]+') do  -- not %S: pandoc's locale treats UTF-8 bytes 0x85/0xA0 as space
     local parts = {}
     for part in word:gmatch('[^-]+') do
       parts[#parts + 1] = part:match('^[%z\1-\127\194-\244][\128-\191]*')
@@ -182,7 +198,8 @@ local RAW_FIELDS = { year = true, booktitle = true, holder = true, scale = true,
                      archiveprefix = true, eprinttype = true,
                      -- bst sort key and set.entry.lang
                      key = true, organization = true, langid = true, language = true, title = true, author = true,
-                     journal = true, journaltitle = true, address = true, location = true, publisher = true }
+                     journal = true, journaltitle = true, address = true, location = true, publisher = true,
+                     series = true, eprint = true, url = true }
 
 -- Fields of one entry body, in order: {braced} (also kept raw as name_braced), "quoted" or bare.
 -- ponytail: no @string expansion or # concatenation; bare macro names are kept verbatim.
@@ -262,9 +279,6 @@ end
 
 -- Chinese text takes no space around a citation ("再生产 [@a] 认为" -> "再生产[@a]认为").
 -- xeCJK drops such spaces in PDF; HTML and Word would keep them, so drop them here.
-local function is_cjk_cp(cp)
-  return cp and ((cp >= 0x3000 and cp <= 0x9FFF) or (cp >= 0xFF00 and cp <= 0xFFEF))
-end
 local function edge_cp(el, last)
   if not el or el.t ~= 'Str' then return nil end
   local cp
@@ -365,11 +379,17 @@ local LANGID = {
   english = 'en', american = 'en', british = 'en', chinese = 'zh',
   japanese = 'ja', korean = 'ko', russian = 'ru',
 }
+-- Beyond bst (which maps zh-CN etc. to "other"): BCP 47 codes as Zotero and CSL-JSON write them.
+local function lang_of(id)
+  id = id:lower()
+  return LANGID[id] or ({ zh = 'zh', ja = 'ja', ko = 'ko', en = 'en', ru = 'ru' })[id:match('^(%a%a)[-_]') or id] or 'other'
+end
 
 -- bst set.entry.lang: langid/language field, else detect from the first non-empty field.
+-- pandoc's `language` covers CSL-JSON/YAML entries, which have no raw bib fields.
 local function entry_lang(raw, r)
-  local id = raw.langid or raw.language
-  if id and id ~= '' then return LANGID[id:lower()] or 'other' end
+  local id = raw.langid or raw.language or (r.language and str(r.language))
+  if id and id ~= '' then return lang_of(id) end
   local text = ''
   for _, v in ipairs({
     raw.title or str(r.title), raw.author or '', raw.journal or '', raw.journaltitle or '',
@@ -465,11 +485,19 @@ function Pandoc(doc)
   for _, r in ipairs(refs) do
     local e = raw[r.id] or {}
     local elang = entry_lang(e, r)  -- bst set.entry.lang
-    -- pandoc drops \quad, which GB/T titles use between title elements (信息与文献\quad 资源描述)
-    -- ponytail: rebuilt via the LaTeX reader, so {braced} protection in such titles is lost
-    if e.title_braced and e.title_braced:find('\\quad') then
-      local t = e.title_braced:gsub('\\quad%s*', '\u{2003}')
-      r.title = pandoc.utils.blocks_to_inlines(pandoc.read(t, 'latex').blocks)
+    local cjk = elang == 'zh' or elang == 'ja' or elang == 'ko'  -- bst is.lang.cjk
+    -- Rebuild from the raw bib value when pandoc's reading is lossy:
+    --  * \quad, which GB/T titles use between title elements (信息与文献\quad 资源描述), is dropped;
+    --  * without an English langid pandoc "unTitlecases" title/booktitle/series by the document
+    --    lang, so a Chinese title loses its English capitals (Python -> python). bst keeps them.
+    -- ponytail: via the LaTeX reader, so {braced} protection in English \quad titles is lost
+    for field, var in pairs({ title = 'title', booktitle = 'container-title', series = 'collection-title' }) do
+      local raw_v = e[field .. '_braced']
+      local journal = field == 'booktitle' and PERIODICAL_TYPES[r.type]  -- container is the journal
+      if raw_v and r[var] and not journal and (cjk or raw_v:find('\\quad')) then
+        raw_v = raw_v:gsub('\\quad%s*', '\u{2003}')
+        r[var] = pandoc.utils.blocks_to_inlines(pandoc.read(raw_v, 'latex').blocks)
+      end
     end
     r['gbt-sort'] = bst_sort_key(e, r, elang)
     r.type = BIBTYPE[e.type] or r.type
@@ -501,18 +529,39 @@ function Pandoc(doc)
       and not r['event-date'] and dp and #dp == 3 then
       r['event-date'] = { ['date-parts'] = { { dp[1], dp[2], dp[3] } } }
     end
-    if r.type == 'article' and not r.publisher then r.publisher = e.archiveprefix or e.eprinttype end
-    local lang = r.language and pandoc.utils.stringify(r.language):lower() or ''
-    local cjk = elang == 'zh' or elang == 'ja' or elang == 'ko'  -- bst is.lang.cjk
+    -- bst article: a journal starting with "arXiv" (check.arxiv.preprint), or no journal but an
+    -- eprint, makes the entry a preprint [PP]; the arXiv id after "arXiv:" becomes the URL.
+    if e.type == 'article' then
+      local j = e.journal or e.journaltitle
+      if j and j:lower():sub(1, 5) == 'arxiv' then
+        r.type, r['container-title'] = 'article', nil
+        local _, at = j:lower():find('.*arxiv:')  -- last "arXiv:", as bst scans back from the end
+        local id = at and j:sub(at + 1):match('^[^ %[]+')
+        if id then r.url = 'https://arxiv.org/abs/' .. id end
+      elseif not j and (e.eprint or e.archiveprefix or e.eprinttype) then
+        r.type = 'article'
+      end
+    end
+    if r.type == 'article' then
+      -- bst format.eprint: source name; it never builds a URL from eprint (entry.eprint is unset),
+      -- so drop the one pandoc derives from it
+      local src = e.archiveprefix or e.eprinttype
+      src = ({ arxiv = 'arXiv', pubmed = 'PubMed' })[src] or src
+      if not src and (e.journal or e.journaltitle or ''):lower():sub(1, 5) == 'arxiv' then src = 'arXiv' end
+      r.publisher = r.publisher or src
+      if e.eprint and not e.url and r.url and pandoc.utils.stringify(r.url):find(e.eprint, 1, true) then
+        r.url = nil
+      end
+    end
     local en = elang == 'en'
     if r.type == 'map' and e.booktitle and not r['container-title'] then  -- map in an atlas
       r['container-title'] = fullwidth_str(en and sentence_case_raw(e.booktitle_braced) or e.booktitle)
     end
-    r.edition = edition(r.edition, cjk, lang)
+    r.edition = edition(r.edition, elang)
     if r.volume and not PERIODICAL_TYPES[r.type] then  -- bst format.bvolume (books, maps, ...)
       local v = pandoc.utils.stringify(r.volume)
       if v:match('^%d+$') then
-        r.volume = (lang:match('^ko') or lang == 'korean') and ('제 ' .. v .. ' 권')
+        r.volume = elang == 'ko' and ('제 ' .. v .. ' 권')
           or cjk and ('第 ' .. v .. ' 卷') or ('v.' .. v)
       end
     end
