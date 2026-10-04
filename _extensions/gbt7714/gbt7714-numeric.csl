@@ -325,6 +325,14 @@
       <else-if variable="URL DOI" match="any">
         <text value="OL" />
       </else-if>
+      <else-if type="post post-weblog webpage" match="any">
+        <!-- bst `online` is always EB/OL -->
+        <text value="OL" />
+      </else-if>
+      <else-if type="post post-weblog webpage" match="any">
+        <!-- bst `online` is always EB/OL -->
+        <text value="OL" />
+      </else-if>
     </choose>
   </macro>
   
@@ -334,6 +342,14 @@
         <text variable="medium" />
       </if>
       <else-if variable="URL DOI" match="any">
+        <text value="OL" />
+      </else-if>
+      <else-if type="post post-weblog webpage" match="any">
+        <!-- bst `online` is always EB/OL -->
+        <text value="OL" />
+      </else-if>
+      <else-if type="post post-weblog webpage" match="any">
+        <!-- bst `online` is always EB/OL -->
         <text value="OL" />
       </else-if>
     </choose>
@@ -639,11 +655,6 @@
           </else>
         </choose>
       </if>
-      <else-if variable="accessed">
-        <date variable="accessed" prefix="[" suffix="]">
-          <date-part name="year" range-delimiter="-" />
-        </date>
-      </else-if>
     </choose>
   </macro>
   
@@ -667,11 +678,6 @@
           </else>
         </choose>
       </if>
-      <else-if variable="accessed">
-        <date variable="accessed" prefix="[" suffix="]">
-          <date-part name="year" range-delimiter="-" />
-        </date>
-      </else-if>
     </choose>
   </macro>
   

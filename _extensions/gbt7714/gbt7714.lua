@@ -46,6 +46,23 @@ end
 -- Mirror bst `convert.fullwidth.punctuations` (default CTL_bib_punct = GB, all languages):
 -- ", " ": " "; " -> ，：；  "!" "?" -> ！？  "(" ")" -> （）, dropping the adjacent space.
 local FW_TRAIL = { [','] = '，', [':'] = '：', [';'] = '；' }
+
+local function fullwidth_str(s)
+  return (s:gsub(', ', '，'):gsub(': ', '：'):gsub('; ', '；'):gsub('!', '！'):gsub('%?', '？')
+    :gsub(' ?%(', '（'):gsub('%) ?', '）'))
+end
+
+-- bst change.case$ "t" on a raw bib string: lowercase ASCII outside {braces}, keep the first char.
+local function sentence_case_raw(s)
+  local depth, out = 0, {}
+  for i = 1, #s do
+    local c = s:sub(i, i)
+    if c == '{' then depth = depth + 1
+    elseif c == '}' then depth = depth - 1
+    else out[#out + 1] = (depth == 0 and #out > 0) and c:gsub('[A-Z]', string.lower) or c end
+  end
+  return table.concat(out)
+end
 local FW_FIELDS = { 'title', 'container-title', 'collection-title', 'volume-title',
                     'publisher', 'publisher-place', 'event-title', 'event-place' }
 
@@ -142,6 +159,7 @@ local function initials(given)
 end
 
 local function format_name(n)
+  if n.literal then n.literal = fullwidth_str(n.literal) end  -- bst format.names punctuations
   if n.literal or not n.family then return n end
   local fam, giv = n.family, n.given
   if has_cjk(fam) then
@@ -171,7 +189,7 @@ local BIBTYPE = {
 -- ponytail: regex scan of .bib files for `@type{key, field = {value}, ...}`; CSL-JSON/YAML bibs
 -- carry correct types already. Ceiling: values must be {braced} (not "quoted" or bare macros).
 -- Returns key -> { type = biblatex type, <field> = raw value } for fields pandoc drops.
-local RAW_FIELDS = { year = true, holder = true, scale = true, dimensions = true, cstr = true, eid = true,
+local RAW_FIELDS = { year = true, booktitle = true, holder = true, scale = true, dimensions = true, cstr = true, eid = true,
                      archiveprefix = true, eprinttype = true }
 
 local function bib_scan(meta)
@@ -190,7 +208,10 @@ local function bib_scan(meta)
         local e = { type = t:lower() }
         for name, val in body:gmatch('([%w_-]+)%s*=%s*(%b{})') do
           name = name:lower()
-          if RAW_FIELDS[name] then e[name] = val:sub(2, -2):gsub('[{}]', '') end
+          if RAW_FIELDS[name] then
+            e[name] = val:sub(2, -2):gsub('[{}]', '')
+            e[name .. '_braced'] = val:sub(2, -2)
+          end
         end
         entries[k] = e
         ::continue::
@@ -231,13 +252,18 @@ function Pandoc(doc)
       -- bst `periodical`: no container; volume/year ranges with full-width punctuation and "—"
       r['container-title'] = nil
       if r.volume then
-        r.volume = pandoc.utils.stringify(r.volume):gsub(', ', '，'):gsub(' ?%(', '（'):gsub('%) ?', '）'):gsub('%-', '—')
+        r.volume = fullwidth_str(pandoc.utils.stringify(r.volume)):gsub('%-', '—')
       end
       if e.year and e.year:find('-') then r.issued = { literal = e.year:gsub('%-', '—') } end
     end
     if r.type == 'article' and not r.publisher then r.publisher = e.archiveprefix or e.eprinttype end
     local lang = r.language and pandoc.utils.stringify(r.language):lower() or ''
     local cjk = is_cjk(r)
+    local en = not cjk and (lang == '' or lang:match('^en') or lang == 'english'
+      or lang == 'american' or lang == 'british')  -- bst entry.lang = lang.en
+    if r.type == 'map' and e.booktitle and not r['container-title'] then  -- map in an atlas
+      r['container-title'] = fullwidth_str(en and sentence_case_raw(e.booktitle_braced) or e.booktitle)
+    end
     r.edition = edition(r.edition, cjk, lang)
     if r.volume and not PERIODICAL_TYPES[r.type] then  -- bst format.bvolume (books, maps, ...)
       local v = pandoc.utils.stringify(r.volume)
@@ -251,7 +277,6 @@ function Pandoc(doc)
     else
       r.language = nil
       -- bst change.sentence.case: English entries only; periodical titles kept
-      local en = lang == '' or lang:match('^en') or lang == 'english' or lang == 'american' or lang == 'british'
       if en and r.type ~= 'periodical' then r.title = sentence_case(r.title) end
       if en and BOOKTITLE_TYPES[r.type] then r['container-title'] = sentence_case(r['container-title']) end
     end
