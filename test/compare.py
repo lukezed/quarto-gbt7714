@@ -46,8 +46,12 @@ def norm(s, bst_side=False):
 
 def bst(style):
     with tempfile.TemporaryDirectory() as d:
+        # BibTeX does not reliably accept spaces in auxiliary-file paths.
+        # Keep its inputs local so checkouts such as "80 myrepo" work too.
+        shutil.copy(BIB, os.path.join(d, 'references.bib'))
+        shutil.copy(os.path.join(UP, f'gbt7714-{style}.bst'), os.path.join(d, 'style.bst'))
         open(os.path.join(d, 'a.aux'), 'w').write(
-            f'\\citation{{*}}\n\\bibstyle{{{os.path.join(UP, "gbt7714-" + style)}}}\n\\bibdata{{{BIB[:-4]}}}\n')
+            '\\citation{*}\n\\bibstyle{style}\n\\bibdata{references}\n')
         r = subprocess.run(['bibtex', 'a'], cwd=d, capture_output=True, text=True)
         if not os.path.exists(os.path.join(d, 'a.bbl')): sys.exit('bibtex failed:\n' + r.stdout)
         bbl = open(os.path.join(d, 'a.bbl'), encoding='utf-8').read()

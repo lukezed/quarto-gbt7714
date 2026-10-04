@@ -21,6 +21,12 @@ local function warning(msg)
   if quarto and quarto.log and quarto.log.warning then quarto.log.warning(msg) else io.stderr:write('[WARNING] ', msg, '\n') end
 end
 
+-- Quarto catches error() and may continue rendering; fail explicitly without a Lua traceback.
+local function fatal(msg)
+  io.stderr:write('ERROR: gbt7714: ', msg, '\n')
+  os.exit(1)
+end
+
 -- The one CJK range (Han incl. Ext A/B+, kana, Hangul, CJK and full-width punctuation).
 -- `script_of` is separate on purpose: it mirrors bst get.str.lang's per-script ranks.
 local function is_cjk_cp(cp)
@@ -329,7 +335,7 @@ end
 -- ("英文叙述 Smith et al.（2020）"), as xeCJK puts CJK-Latin glue there in PDF.
 -- Order: needs refs after Pandoc()'s loop (r.language is then 'zh' or nil), and must run
 -- before gbt_cites, which rewrites AuthorInText cites into plain text + SuppressAuthor.
-local function trim_cite_spaces(doc, refs)
+local function trim_cite_spaces(doc, refs, style)
   local latin = {}
   for _, r in ipairs(refs) do latin[r.id] = not r.language end
   local function opens_latin(c)
@@ -343,7 +349,11 @@ local function trim_cite_spaces(doc, refs)
         local drop = false
         if el.t == 'Space' or el.t == 'SoftBreak' then
           local prev, nxt = ils[i - 1], ils[i + 1]
-          drop = (nxt and nxt.t == 'Cite' and not opens_latin(nxt) and cjk_side(edge_cp(prev, true)))
+          local ct = nxt and nxt.t == 'Cite' and nxt.citations[1]
+          -- Explicit prose author plus year: `Lareau [-@x]` -> `Lareau（2011）`.
+          local year_only = style == 'authoryear' and ct and ct.mode == 'SuppressAuthor'
+            and #ct.prefix == 0 and edge_cp(prev, true) ~= nil
+          drop = year_only or (nxt and nxt.t == 'Cite' and not opens_latin(nxt) and cjk_side(edge_cp(prev, true)))
               or (prev and prev.t == 'Cite' and cjk_side(edge_cp(nxt, false)))
         end
         if not drop then out:insert(el) end
@@ -396,21 +406,42 @@ local function gbt_cites(doc, refs, style)
   end
   return doc:walk({
     Cite = function(c)
+      -- A narrative citation can contain several references: @a [see also @b].
+      -- Pull its author into the prose before keeping/splitting the cluster, so
+      -- numeric retains the author and note keeps it in the full first note too.
+      local narrative = pandoc.Inlines({})
+      if #c.citations > 1 then
+        for _, ct in ipairs(c.citations) do
+          if ct.mode == 'AuthorInText' then
+            local a = intext_author(byid[ct.id])
+            if a then
+              narrative:insert(pandoc.Str(a))
+              ct.mode = note and 'NormalCitation' or 'SuppressAuthor'
+            end
+          end
+        end
+      end
+      local function finish(content)
+        if #narrative == 0 then return content end
+        local out = pandoc.Inlines(narrative)
+        if content.t == 'Cite' then out:insert(content) else out:extend(content) end
+        return out
+      end
       local split = #c.citations == 1
       for _, ct in ipairs(c.citations) do split = split or postnote(ct.suffix) ~= nil end
       if not split then
         local pre = c.citations[1].prefix
-        if not (numeric and #pre > 0) then return nil end
+        if not (numeric and #pre > 0) then return #narrative > 0 and finish(c) or nil end
         c.citations[1].prefix = pandoc.Inlines({})  -- [见 @a; @b] -> 见[1,2]
-        local out = pandoc.Inlines(pre); out:insert(pandoc.Cite({}, c.citations)); return out
+        local out = pandoc.Inlines(pre); out:insert(pandoc.Cite({}, c.citations)); return finish(out)
       end
       if note and #c.citations > 1 then  -- keep one note; only normalize each postnote
         for _, ct in ipairs(c.citations) do note_suffix(ct) end
-        return c
+        return finish(c)
       end
       local out = pandoc.Inlines({})
       for _, ct in ipairs(c.citations) do out:extend(one(ct)) end
-      return out
+      return finish(out)
     end,
   })
 end
@@ -518,7 +549,12 @@ local function run_citeproc(doc, refs, style)
       end
     end,
   })
+  -- Only the final citeproc pass should insert an automatic bibliography heading.
+  -- Keeping the first pass's heading leaves an empty duplicate chapter in PDF books.
+  local reference_title = doc.meta['reference-section-title']
+  doc.meta['reference-section-title'] = nil
   doc = pandoc.utils.citeproc(mark_prefixes(doc))
+  doc.meta['reference-section-title'] = reference_title
   local order = {}
   local html = FORMAT:match('html') ~= nil
   doc = doc:walk({
@@ -656,9 +692,7 @@ function Pandoc(doc)
   end
   local style = ascii_lower(pandoc.utils.stringify(doc.meta.gbt7714 or 'authoryear'))
   if not STYLES[style] then
-    -- Quarto turns error() into a log line and keeps rendering, so stop explicitly.
-    io.stderr:write('ERROR: gbt7714: unknown style "', style, '" (use authoryear, numeric or note)\n')
-    os.exit(1)
+    fatal('unknown style "' .. style .. '" (use authoryear, numeric or note)')
   end
   -- Chinese convention: the note mark goes before the punctuation ("研究¹。"); pandoc defaults to after
   if style == 'note' and doc.meta['notes-after-punctuation'] == nil then
@@ -667,11 +701,15 @@ function Pandoc(doc)
   -- A user's own CSL gets the data fixes only; the GB/T citation rewrites assume our CSL.
   local own_csl = doc.meta.csl ~= nil
     and not pandoc.utils.stringify(doc.meta.csl):match('gbt7714%-%a+%.csl$')
+  if own_csl then
+    warning('gbt7714: custom CSL "' .. str(doc.meta.csl) .. '" overrides the bundled style; GB/T citation rewrites are disabled, bibliography data fixes still apply')
+  end
   if doc.meta.csl == nil then
     doc.meta.csl = pandoc.path.join({ dir, 'gbt7714-' .. style .. '.csl' })
   end
 
-  local refs = pandoc.utils.references(doc)
+  local ok, refs = pcall(pandoc.utils.references, doc)
+  if not ok then fatal(tostring(refs)) end
   if #refs == 0 then return doc end
   local raw = bib_scan(doc.meta)
   for _, r in ipairs(refs) do
@@ -780,7 +818,7 @@ function Pandoc(doc)
   end
   doc.meta.references = refs
   doc.meta.bibliography = nil
-  doc = trim_cite_spaces(doc, refs)
+  doc = trim_cite_spaces(doc, refs, not own_csl and style or nil)
   if own_csl then return doc end
   if style == 'note' then  -- `Lareau [-@x]`: the author is in the prose, but the note needs the full entry
     doc = doc:walk({ Cite = function(c)

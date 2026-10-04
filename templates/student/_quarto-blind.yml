@@ -1,0 +1,3 @@
+blind: true
+project:
+  output-dir: _output-blind

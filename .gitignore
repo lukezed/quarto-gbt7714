@@ -24,3 +24,13 @@ example/arch-cases/*.md
 example/arch-cases/*.txt
 example/arch-cases/*.docx
 example/arch-cases/*.pdf
+
+# Rendered starter projects
+templates/**/_output*/
+templates/**/_extensions/
+
+# Local starter previews and layout QA
+_preview/
+
+/.quarto/
+**/*.quarto_ipynb

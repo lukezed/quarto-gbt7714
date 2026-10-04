@@ -1,0 +1,12 @@
+% Fandol ships with TeX Live; no operating-system-specific font is required.
+\usepackage{setspace,needspace,etoolbox}
+% Start tables with room for the caption, header and initial rows.
+\BeforeBeginEnvironment{longtable}{\Needspace{6\baselineskip}}
+\usepackage{booktabs,array}
+\setlength{\parindent}{2em}
+\setlength{\parskip}{0.25em}
+\ctexset{
+  section={format=\Large\bfseries,beforeskip=1.2ex plus .2ex,afterskip=.6ex},
+  subsection={format=\large\bfseries,beforeskip=1ex plus .2ex,afterskip=.4ex}
+}
+\raggedbottom
