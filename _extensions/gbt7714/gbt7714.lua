@@ -684,23 +684,81 @@ local function language_order(meta)
   return order
 end
 
-local function bst_sort_key(raw, r, lang, order)
+-- Optional preprocessing, batched once per document; never changes display names.
+local function pinyin_names(meta, refs, raw, overrides)
+  local mode = str(meta['gbt7714-sort'] or 'upstream')
+  if mode ~= 'upstream' and mode ~= 'pinyin' then
+    fatal('gbt7714-sort must be upstream or pinyin')
+  end
+  if mode == 'upstream' then return {} end
+  local requests = {}
+  for _, r in ipairs(refs) do
+    local e = raw[r.id] or {}
+    if entry_lang(e, r) == 'zh' and not overrides[r.id] and (not e.key or e.key == '') then
+      local item = { id = r.id, organization = e.organization }
+      for _, role in ipairs({ 'author', 'editor' }) do
+        if r[role] then
+          item[role] = {}
+          for _, n in ipairs(r[role]) do
+            local name = {}
+            for _, field in ipairs({ 'literal', 'family', 'given', 'suffix', 'dropping-particle', 'non-dropping-particle' }) do
+              if n[field] then name[field] = str(n[field]) end
+            end
+            table.insert(item[role], name)
+          end
+        end
+      end
+      table.insert(requests, item)
+    end
+  end
+  if #requests == 0 then return {} end
+  local python = str(meta['gbt7714-pinyin-python'] or 'python3')
+  local ok, output = pcall(pandoc.pipe, python,
+    { pandoc.path.join({ dir, 'pinyin-sort.py' }) }, pandoc.json.encode(requests))
+  if not ok then
+    fatal('automatic pinyin sorting failed; install pypinyin in the Python selected by gbt7714-pinyin-python: ' .. tostring(output))
+  end
+  local decoded, result = pcall(pandoc.json.decode, output)
+  if not decoded or type(result) ~= 'table' then fatal('invalid response from pinyin-sort.py') end
+  return result
+end
+
+local function sort_overrides(meta)
+  local configured = meta['gbt7714-sort-keys']
+  if configured == nil then return {} end
+  if pandoc.utils.type(configured) ~= 'table' and pandoc.utils.type(configured) ~= 'Map' then
+    fatal('gbt7714-sort-keys must be a mapping from reference IDs to nonempty strings')
+  end
+  local keys = {}
+  for id, value in pairs(configured) do
+    local kind = pandoc.utils.type(value)
+    if (kind ~= 'Inlines' and kind ~= 'string') or str(value):match('^[ \t\r\n]*$') then
+      fatal('gbt7714-sort-keys values must be nonempty strings')
+    end
+    keys[id] = str(value)
+  end
+  return keys
+end
+
+local function bst_sort_key(raw, r, lang, order, override, converted)
   -- bst sorts on the year field; biblatex `date`, CSL-JSON/YAML and crossref give only r.issued
   local dp = r.issued and r.issued['date-parts'] and r.issued['date-parts'][1]
   local year = raw.year or (dp and dp[1] and tostring(dp[1])) or ''
   local function names(list) return list and #list > 0 and sort_names(list, year) or nil end
-  local who = raw.key
+  local who = override or raw.key
+  local names_ref = converted or r
   if who == nil or who == '' then
     local anon = lang == 'zh' and 'yi4 ming2' or 'anon'
-    local t = raw.type
+    local t = raw.type or (converted and r.type)
+    local organization = converted and converted.organization or raw.organization
     if t == 'book' or (t == 'inbook' and raw.booktitle) then
-      who = names(r.author) or names(r.editor) or anon
+      who = names(names_ref.author) or names(names_ref.editor) or anon
     elseif t == 'collection' or t == 'proceedings' then
-      who = names(r.editor)
-        or (raw.organization and sortify((raw.organization:gsub('^The ', ''))))
+      who = names(names_ref.editor)
+        or (organization and sortify((organization:gsub('^The ', ''))))
         or anon
     else
-      who = names(r.author) or anon
+      who = names(names_ref.author) or anon
     end
   end
   local s = string.char(64 + (order[lang] or order.other)) .. '    ' .. who .. '    '
@@ -742,6 +800,8 @@ function Pandoc(doc)
   if not ok then fatal(tostring(refs)) end
   if #refs == 0 then return doc end
   local raw = bib_scan(doc.meta)
+  local overrides = sort_overrides(doc.meta)
+  local converted = pinyin_names(doc.meta, refs, raw, overrides)
   for _, r in ipairs(refs) do
     local e = raw[r.id] or {}
     local elang = entry_lang(e, r)  -- bst set.entry.lang
@@ -762,7 +822,7 @@ function Pandoc(doc)
       end
     end
     -- before the holder override below: bst sorts patents by inventors, labels them by holder
-    r['gbt-sort'] = bst_sort_key(e, r, elang, order)
+    r['gbt-sort'] = bst_sort_key(e, r, elang, order, overrides[r.id], converted[r.id])
     r.type = BIBTYPE[e.type] or r.type
     -- fields pandoc drops; bst uses holder (patent assignee) in place of the inventors
     if e.holder then

@@ -28,6 +28,7 @@ python3 test/test_inferred_year.py # 推定年份与出版年份的独立消歧
 python3 test/test_fragment_entries.py # 丛书卷册与日期片段
 python3 test/test_localization.py # 译者称谓：对照 BST，独立于文档语言
 python3 test/test_language_order.py # 语言分组配置、拼音 key 与编号稳定性
+python3 test/test_pinyin.py         # 需安装 pypinyin；JSON/BibTeX/内联文献、覆盖键、消歧与 filter 组合
 python3 test/test_bibliography_heading.py # 自动标题与显式文献表标题
 python3 test/test_blind.py --pdf --manuscript # 投稿稿分页与匿名检查
 # 创建并渲染 manuscript 项目后，检查 Word 样式及图注 OOXML：
@@ -64,4 +65,4 @@ sh example/arch-cases/run.sh      # Quarto 集成（标题、交叉引用、marg
 
 对照 [quarto-chinese 的说明](https://retompi.com/quarto-chinese/) 和其 `localize-cnbib.lua`、`sort-bib.py` 后，补上外文译者误用“译”的遗漏，并提供语言分组配置。上游 BST 的 `bbl.translator` 区分“译”与 `trans.`；`format.editors` 不附加角色称谓；中文拼音依赖 `key`。新增小样本验证了标准示例库未覆盖的外文译者场景。
 
-此次沿用本扩展的数据预处理与 CSL 分支，没有复制对方代码，也没有引入 Python 排序依赖。完整的正文排版工具集不属于引用扩展的覆盖范围。
+本地化修正沿用本扩展的数据预处理与 CSL 分支。随后根据 [TomBener 的反馈](https://github.com/TomBener/quarto-chinese/issues/4#issuecomment-5985882760)，增加可选的 Python/pypinyin 自动排序桥接：默认仍与上游一致，显式启用才需要依赖。多音姓氏表复用自 quarto-chinese，许可证随扩展附带；排序发生在 citeproc 消歧之前。详见 [issue #1](https://github.com/lukezed/quarto-gbt7714/issues/1)。完整的正文排版工具集不属于引用扩展的覆盖范围。

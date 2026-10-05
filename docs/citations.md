@@ -15,7 +15,7 @@ gbt7714: authoryear   # authoryear（默认）| numeric | note
 ```
 
 - 文献条目不依赖 `lang`：中文条目的"等""佚名"等在任何文档语言下都正确。但 Quarto 自己生成的标题（"References""Footnotes"、图表标签）跟随 `lang`，中文文档请设 `lang: zh`。
-- 中文条目要按拼音排序，需在 bib 中提供 `key` 字段（如 `key = {wang2 ming2}`），与 upstream bst 相同；没有 `key` 的中文条目按码位排在其后。
+- 默认沿用 upstream bst 的排序：中文条目使用 `.bib` 的 `key`，缺少时按码位排在其后。BibTeX、CSL JSON 和内联 references 均可启用下述自动拼音排序。
 - 注释体例（`note`）：重复引用写"同N"（指向第 N 条注释）；注码放在标点前（"研究¹。"），可用 `notes-after-punctuation: true` 改回；文末同时输出参考文献表，不需要时设 `suppress-bibliography: true`。
   - "同N"按全书统一编号。book 类 PDF（`scrreprt`、`ctexbook` 等）默认每章重置脚注编号，会让"同N"指错，需让脚注全书连续：
 
@@ -51,7 +51,35 @@ gbt7714-language-order: [en, zh, ja, ru, other]
 
 配置必须恰好包含这五项，各一次；`other` 包括韩文及其他语言。每组内部继续使用已有排序规则。顺序编码制和脚注体例仍按引用顺序编号，不受此选项影响；自定义 CSL 的排序由该 CSL 决定。
 
-中文姓名不会自动转拼音。需要拼音排序时，在 `.bib` 中写明 `key`，多音姓氏也由这个字段指定，例如 `author = {单明}, key = {shan4 ming2}`。这是上游 BibTeX 样式的用法。
+### 可选自动拼音排序
+
+默认 `gbt7714-sort: upstream` 保留上游排序。使用 Zotero 导出的 CSL JSON，或不想逐条填写 BibTeX `key` 时，可启用：
+
+```yaml
+filters: [gbt7714]
+bibliography: references.json  # 也支持 .bib 或内联 references
+gbt7714: authoryear
+gbt7714-sort: pinyin
+```
+
+自动模式额外需要 Python 3 和 [pypinyin](https://github.com/mozillazg/python-pinyin)：
+
+```bash
+python3 -m pip install pypinyin
+```
+
+默认调用 `python3`；Windows 或虚拟环境可用 `gbt7714-pinyin-python: python` 或解释器的完整路径指定。依赖缺失会明确报错，不会静默退回码位排序。默认模式无需 Python。
+
+排序键优先级为 **`gbt7714-sort-keys` > `.bib` 的 `key` > 自动拼音**。手动覆盖支持所有文献输入格式，也可单独用于默认模式，无需安装 pypinyin：
+
+```yaml
+gbt7714-sort-keys:
+  shan2024: "shan4 ming2"
+```
+
+键名是文献 ID，值采用小写拼音和数字声调，如 `shan4 ming2`。自动模式只处理中文条目的排序姓名，不改显示内容；结构化姓名支持常见多音姓氏，机构等 `literal` 名称按普通词语转音。复姓、多音名、繁体字及未收录字的读音仍需核对，可用上述配置覆盖。语言分组规则不变，顺序编码制和脚注体例仍按引用顺序排列；自定义 CSL 只有使用 `gbt-sort` 排序键才会采用这里的顺序。
+
+感谢 [TomBener 的反馈](https://github.com/TomBener/quarto-chinese/issues/4#issuecomment-5985882760)。自动转音方案参考 [quarto-chinese](https://github.com/TomBener/quarto-chinese)，多音姓氏表按 MIT 许可复用；本扩展在 citeproc 消歧之前计算排序键。
 
 ## 中文 PDF
 
@@ -157,6 +185,7 @@ format:
 
 ## 适用范围与限制
 
+- **Filter 顺序**：需要修改 `Cite` 节点的 filter（例如调整引文顺序、移动引文标点）应放在 `gbt7714` **之前**。本扩展通常会提前调用 citeproc，并将正文引用转为已排版内容，后续 filter 不再能依赖原始 `Cite` 节点。
 - **只作用于 citeproc**。`cite-method: natbib` / `biblatex` 时 filter 不做任何事，PDF 交给 LaTeX（可直接用 upstream 的 `gbt7714` 宏包）。
 - **Typst**：Quarto 的 typst 默认用 Typst 原生引用，不经过 CSL filter；要用本格式，在 `format: typst` 下设 `citeproc: true`（filter 会给出提示）。
 - **Quarto book（HTML）**：Quarto 每章单独跑 citeproc，references 页由 Quarto 另起一个不带 filter 的 pandoc 生成，extension 无法介入。因此：
