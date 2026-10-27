@@ -51,6 +51,19 @@ gbt7714-language-order: [en, zh, ja, ru, other]
 
 配置必须恰好包含这五项，各一次；`other` 包括韩文及其他语言。每组内部继续使用已有排序规则。顺序编码制和脚注体例仍按引用顺序编号，不受此选项影响；自定义 CSL 的排序由该 CSL 决定。
 
+### 文献表的全角／半角符号
+
+默认 `gbt7714-bibpunct: GB` 与上游 BST 的 `bibpunct=GB` 一致：句点、方括号、斜线、连接号用半角，逗号、冒号、分号、圆括号用全角，西文文献也不例外，题名内的标点同样转为全角，例如 `Teaching and Teacher Education，59（2）：79-91`。人文社科期刊多按语种区分，可改为：
+
+```yaml
+gbt7714-bibpunct: bylanguage  # 西文文献用半角，中文文献不变
+```
+
+- `bylanguage`：非中日韩文献的著录符号和题名内标点都保持半角，例如 `Teaching and Teacher Education, 59(2): 79-91`。中日韩文献与 `GB` 相同。上游 BST 的 `bylanguage` 还把中文文献的句点改为全角“．”，本选项没有跟随。
+- `half`：所有文献、所有符号都用半角（如清华大学学位论文），正文引文也一并改为半角。
+
+自定义 CSL（文件名不符合 `gbt7714-*.csl`）不受此选项影响。
+
 ### 可选自动拼音排序
 
 默认 `gbt7714-sort: upstream` 保留上游排序。使用 Zotero 导出的 CSL JSON，或不想逐条填写 BibTeX `key` 时，可启用：

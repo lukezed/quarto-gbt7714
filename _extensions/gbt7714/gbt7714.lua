@@ -78,7 +78,11 @@ local FW_TRAIL = { [','] = '，', [':'] = '：', [';'] = '；' }
 
 -- Two forms of one rule: fullwidth_str for plain strings (literal names, volumes, raw bib
 -- values), fullwidth (below) for pandoc Inlines, where spaces are separate elements.
+-- `gbt7714-bibpunct` (bst CTL_bib_punct): GB converts every entry; half none; bylanguage only
+-- CJK entries. Set per entry in Pandoc() before the conversions below run.
+local fw_on = true
 local function fullwidth_str(s)
+  if not fw_on then return s end
   return (s:gsub(', ', '，'):gsub(': ', '：'):gsub('; ', '；'):gsub('!', '！'):gsub('%?', '？')
     :gsub(' ?%(', '（'):gsub('%) ?', '）'))
 end
@@ -97,7 +101,7 @@ local function sentence_case_raw(s)
   return table.concat(out)
 end
 local function fullwidth(x)
-  if x == nil or type(x) == 'string' then return x end
+  if not fw_on or x == nil or type(x) == 'string' then return x end
   return x:walk({ Inlines = function(ils)
     local out = pandoc.Inlines{}
     for i, el in ipairs(ils) do
@@ -117,6 +121,30 @@ local function fullwidth(x)
     end
     return out
   end })
+end
+
+-- bst bibpunct=half/bylanguage for the CSL's own separators: ", " ": " "; " "(" ")".
+local BIBPUNCT = { GB = true, half = true, bylanguage = true }
+local HALF_CSL = { { '，', ', ' }, { '：', ': ' }, { '；', '; ' }, { '（', '(' }, { '）', ')' } }
+local function halfwidth_csl(xml)
+  for _, p in ipairs(HALF_CSL) do xml = xml:gsub(p[1], p[2]) end
+  return xml
+end
+-- half: the whole style; bylanguage: only the `*-en` macros, which the bundled CSLs use for
+-- every non-CJK entry (the layouts branch on `language`, set on CJK entries only).
+local function bibpunct_csl(path, punct)
+  local f = io.open(path, 'r')
+  if not f then fatal('cannot read CSL "' .. path .. '"') end
+  local xml = f:read('a'); f:close()
+  if punct == 'half' then
+    xml = halfwidth_csl(xml)
+  else
+    xml = xml:gsub('(<macro name="[^"]*%-en">)(.-)(</macro>)', function(a, b, c) return a .. halfwidth_csl(b) .. c end)
+  end
+  -- ponytail: one temp file per render, left to the OS temp cleaner
+  local out = os.tmpname() .. '.csl'
+  f = io.open(out, 'w'); f:write(xml); f:close()
+  return out
 end
 
 local FW_FIELDS = { 'title', 'container-title', 'collection-title', 'volume-title',
@@ -795,6 +823,13 @@ function Pandoc(doc)
   if doc.meta.csl == nil then
     doc.meta.csl = pandoc.path.join({ dir, 'gbt7714-' .. style .. '.csl' })
   end
+  local punct = pandoc.utils.stringify(doc.meta['gbt7714-bibpunct'] or 'GB')
+  if not BIBPUNCT[punct] then
+    fatal('unknown gbt7714-bibpunct "' .. punct .. '" (use GB, half or bylanguage)')
+  end
+  if punct ~= 'GB' and not own_csl then
+    doc.meta.csl = bibpunct_csl(pandoc.utils.stringify(doc.meta.csl), punct)
+  end
 
   local ok, refs = pcall(pandoc.utils.references, doc)
   if not ok then fatal(tostring(refs)) end
@@ -806,6 +841,7 @@ function Pandoc(doc)
     local e = raw[r.id] or {}
     local elang = entry_lang(e, r)  -- bst set.entry.lang
     local cjk = elang == 'zh' or elang == 'ja' or elang == 'ko'  -- bst is.lang.cjk
+    fw_on = punct == 'GB' or (punct == 'bylanguage' and cjk)
     -- Rebuild from the raw bib value when pandoc's reading is lossy:
     --  * \quad, which GB/T titles use between title elements (信息与文献\quad 资源描述), is dropped;
     --  * without an English langid pandoc "unTitlecases" title/booktitle/series by the document
