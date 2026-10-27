@@ -560,6 +560,29 @@ local function drop_prefix_spaces(ils)
   return out
 end
 
+-- docx: Word gives a run holding any CJK or full-width character w:hint="eastAsia", and then sets
+-- Latin-1 letters in it (Bürkner, Pyhältö) in the East Asian font. Give each CJK / non-CJK stretch
+-- of a citation its own run; a Span is enough to stop pandoc merging them back into the prose.
+local function docx_runs(ils)
+  local out = pandoc.Inlines({})
+  for _, el in ipairs(ils) do
+    if el.t == 'Str' then
+      local buf, cur = {}, nil
+      for _, cp in utf8.codes(el.text) do
+        local c = is_cjk_cp(cp)
+        if cur ~= nil and c ~= cur then
+          out:insert(pandoc.Span({ pandoc.Str(table.concat(buf)) })); buf = {}
+        end
+        cur = c; buf[#buf + 1] = utf8.char(cp)
+      end
+      if #buf > 0 then out:insert(pandoc.Span({ pandoc.Str(table.concat(buf)) })) end
+    else
+      out:insert(el)
+    end
+  end
+  return out
+end
+
 -- Render citations ourselves (Quarto has no hook after its own citeproc), so we can post-process
 -- them: numeric compression, prefix spaces. The bibliography is left to Quarto's citeproc via
 -- `nocite: "@*"` over the references actually listed, in our numbering order.
@@ -590,6 +613,7 @@ local function run_citeproc(doc, refs, style)
   doc.meta['reference-section-title'] = reference_title
   local order = {}
   local html = FORMAT:match('html') ~= nil
+  local docx = FORMAT:match('docx') ~= nil
   doc = doc:walk({
     Cite = function(c)
       local ids = {}
@@ -613,7 +637,8 @@ local function run_citeproc(doc, refs, style)
           end
         end
       end
-      if not html then return content end
+      if docx then content = docx_runs(content) end
+      if not html and not docx then return content end
       return pandoc.Span(content, { class = 'citation', ['data-cites'] = table.concat(ids, ' ') })
     end,
     Span = function(sp)
