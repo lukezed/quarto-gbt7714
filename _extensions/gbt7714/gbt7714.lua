@@ -81,6 +81,7 @@ local FW_TRAIL = { [','] = '，', [':'] = '：', [';'] = '；' }
 -- `gbt7714-bibpunct` (bst CTL_bib_punct): GB converts every entry; half none; bylanguage only
 -- CJK entries. Set per entry in Pandoc() before the conversions below run.
 local fw_on = true
+local cite_half = false  -- `gbt7714-citepunct: half`, set in Pandoc()
 local function fullwidth_str(s)
   if not fw_on then return s end
   return (s:gsub(', ', '，'):gsub(': ', '：'):gsub('; ', '；'):gsub('!', '！'):gsub('%?', '？')
@@ -132,15 +133,17 @@ local function halfwidth_csl(xml)
 end
 -- half: the whole style; bylanguage: only the `*-en` macros, which the bundled CSLs use for
 -- every non-CJK entry (the layouts branch on `language`, set on CJK entries only).
-local function bibpunct_csl(path, punct)
+-- cite_half (`gbt7714-citepunct: half`): also the <citation> element, for in-text citations.
+local function bibpunct_csl(path, punct, cite_half)
   local f = io.open(path, 'r')
   if not f then fatal('cannot read CSL "' .. path .. '"') end
   local xml = f:read('a'); f:close()
   if punct == 'half' then
     xml = halfwidth_csl(xml)
-  else
+  elseif punct == 'bylanguage' then
     xml = xml:gsub('(<macro name="[^"]*%-en">)(.-)(</macro>)', function(a, b, c) return a .. halfwidth_csl(b) .. c end)
   end
+  if cite_half then xml = xml:gsub('<citation.-</citation>', halfwidth_csl) end
   -- ponytail: one temp file per render, left to the OS temp cleaner
   local out = os.tmpname() .. '.csl'
   f = io.open(out, 'w'); f:write(xml); f:close()
@@ -378,9 +381,11 @@ local function trim_cite_spaces(doc, refs, style)
         if el.t == 'Space' or el.t == 'SoftBreak' then
           local prev, nxt = ils[i - 1], ils[i + 1]
           local ct = nxt and nxt.t == 'Cite' and nxt.citations[1]
-          -- Explicit prose author plus year: `Lareau [-@x]` -> `Lareau（2011）`.
+          -- Explicit prose author plus year: `Lareau [-@x]` -> `Lareau（2011）`; with half-width
+          -- citation brackets a Latin author keeps the space: `Lareau (2011)`.
           local year_only = style == 'authoryear' and ct and ct.mode == 'SuppressAuthor'
             and #ct.prefix == 0 and edge_cp(prev, true) ~= nil
+            and not (cite_half and not cjk_side(edge_cp(prev, true)))
           drop = year_only or (nxt and nxt.t == 'Cite' and not opens_latin(nxt) and cjk_side(edge_cp(prev, true)))
               or (prev and prev.t == 'Cite' and cjk_side(edge_cp(nxt, false)))
         end
@@ -827,8 +832,13 @@ function Pandoc(doc)
   if not BIBPUNCT[punct] then
     fatal('unknown gbt7714-bibpunct "' .. punct .. '" (use GB, half or bylanguage)')
   end
-  if punct ~= 'GB' and not own_csl then
-    doc.meta.csl = bibpunct_csl(pandoc.utils.stringify(doc.meta.csl), punct)
+  local citepunct = pandoc.utils.stringify(doc.meta['gbt7714-citepunct'] or (punct == 'half' and 'half' or 'GB'))
+  if citepunct ~= 'GB' and citepunct ~= 'half' then
+    fatal('unknown gbt7714-citepunct "' .. citepunct .. '" (use GB or half)')
+  end
+  cite_half = citepunct == 'half' and style == 'authoryear'  -- numeric/note citations have no brackets to convert (bibpunct half covers them)
+  if (punct ~= 'GB' or cite_half) and not own_csl then
+    doc.meta.csl = bibpunct_csl(pandoc.utils.stringify(doc.meta.csl), punct, cite_half)
   end
 
   local ok, refs = pcall(pandoc.utils.references, doc)

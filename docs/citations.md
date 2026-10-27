@@ -64,6 +64,18 @@ gbt7714-bibpunct: bylanguage  # 西文文献用半角，中文文献不变
 
 自定义 CSL（文件名不符合 `gbt7714-*.csl`）不受此选项影响。
 
+著者-出版年制的正文引文默认用全角括号和分隔符，如 `（Priestley et al.，2015；张三，2020）`。不少基金申请书和中文稿件的正文用半角，可单独设置：
+
+```yaml
+gbt7714: authoryear
+gbt7714-citepunct: half  # 正文引文：(Priestley et al., 2015; 张三, 2020)
+```
+
+- 只影响正文引文，文献表仍由 `gbt7714-bibpunct` 决定；`gbt7714-bibpunct: half` 时正文引文默认也用半角。
+- 叙述式引文保留西文作者与括号之间的空格，如 `Priestley et al. (2015)`、`Lareau [-@x]` → `Lareau (2011)`；中文作者仍紧接括号，如 `张三(2020)`。页码上标跟在半角括号后。
+- 顺序编码制和脚注体例的正文引文不受影响。
+- 以前复制 CSL、手动改 `<citation>` 的做法不再需要。副本的文件名须符合 `gbt7714-*.csl`，否则会被当作自定义 CSL，GB/T 的引文改写随之关闭。
+
 ### 可选自动拼音排序
 
 默认 `gbt7714-sort: upstream` 保留上游排序。使用 Zotero 导出的 CSL JSON，或不想逐条填写 BibTeX `key` 时，可启用：
